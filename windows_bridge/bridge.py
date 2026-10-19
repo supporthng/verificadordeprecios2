@@ -57,19 +57,26 @@ PORTS = [(1433, 'SQL Server'), (50517, 'SQL Server'), (3306, 'MySQL / MariaDB'),
          (50000, 'IBM Db2'), (2638, 'SQL Anywhere')]
 app = FastAPI(title='Puente LAN - Consulta de Precios', docs_url=None, redoc_url=None)
 WORKER_LAST_POLL = 0.0
+WORKER_LAST_JOB = None
+WORKER_LAST_ERROR = None
+WORKER_JOB_COUNT = 0
+LOG_FILE = None
+LOG_READY = False
 logger = logging.getLogger('conector_lan')
 logger.setLevel(logging.INFO)
 try:
     log_dir = Path(os.environ.get('PROGRAMDATA', str(Path.home()))) / 'ConsultaPrecios'
     log_dir.mkdir(parents=True, exist_ok=True)
-    handler = RotatingFileHandler(log_dir / 'conector.log', maxBytes=500_000,
+    LOG_FILE = log_dir / 'conector.log'
+    handler = RotatingFileHandler(LOG_FILE, maxBytes=500_000,
                                   backupCount=2, encoding='utf-8')
     handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
     logger.addHandler(handler)
+    LOG_READY = True
 except OSError:
     # El conector sigue funcionando si no tiene permiso para crear el registro.
     pass
-logger.info('Conector iniciado; origen de configuración: %s', CONFIG_SOURCE)
+logger.info('Conector v4 iniciado; pid=%s; origen de configuración: %s; registro=%s', os.getpid(), CONFIG_SOURCE, LOG_FILE)
 SESSIONS = set()
 DB_RESULTS = {}  # session-token -> (request id, accessible database names)
 WIZARD_REQUESTS = {}  # db request id -> discovery request id
@@ -112,9 +119,14 @@ def page(body):
 
 @app.get('/health')
 def health():
-    return {'ok': True, 'version': 'asistente-universal-v3',
+    return {'ok': True, 'version': 'asistente-universal-v4',
             'worker_age_seconds': (round(time.monotonic() - WORKER_LAST_POLL, 1)
-                                   if WORKER_LAST_POLL else None)}
+                                   if WORKER_LAST_POLL else None),
+            'worker_job_count': WORKER_JOB_COUNT,
+            'last_job_utc': WORKER_LAST_JOB,
+            'last_error_type': WORKER_LAST_ERROR,
+            'log_path': str(LOG_FILE) if LOG_FILE else None,
+            'log_enabled': LOG_READY}
 
 
 @app.get('/login')
@@ -646,12 +658,16 @@ def _execute_price(job):
     # Los identificadores se escapan y el código de barras siempre es un parámetro.
     sql = (f'SELECT TOP (1) {code}, {description}, {price} '
            f'FROM {schema}.{table} WHERE {code} = ?')
+    logger.info('Consulta SQL: preparando conexión (sin mostrar credenciales)')
     with _external_connection(config['host'], config['port'], config['database']) as cn:
+        logger.info('Consulta SQL: conexión establecida')
         cur = cn.cursor()
         # pyodbc.Connection no garantiza un atributo timeout asignable.
         # El tiempo de conexión se configura en _external_connection.
+        logger.info('Consulta SQL: ejecutando SELECT parametrizado')
         cur.execute(sql, barcode)
         row = cur.fetchone()
+        logger.info('Consulta SQL: SELECT finalizado; encontrado=%s', row is not None)
         if row is None:
             return None
         if row[2] is None:
@@ -662,6 +678,7 @@ def _execute_price(job):
 
 
 def _process_external_queue(table, select, execute):
+    global WORKER_LAST_JOB, WORKER_LAST_ERROR, WORKER_JOB_COUNT
     now = datetime.now(timezone.utc).isoformat()
     jobs = supabase('GET', table, params={
         'status': 'eq.pending', 'expires_at': 'gt.' + now,
@@ -676,15 +693,21 @@ def _process_external_queue(table, select, execute):
         if not claimed:
             continue
         try:
+            WORKER_LAST_JOB = datetime.now(timezone.utc).isoformat()
+            WORKER_JOB_COUNT += 1
+            logger.info('Iniciando trabajo %s; id=%s', table, jid)
             result = execute(job)
             supabase('PATCH', table, params={
                 'id': 'eq.' + jid, 'status': 'eq.processing',
             }, json={'status': 'done', 'result': result, 'error_message': None})
+            WORKER_LAST_ERROR = None
+            logger.info('Trabajo %s completado; id=%s; encontrado=%s', table, jid, result is not None)
         except Exception as exc:
+            WORKER_LAST_ERROR = type(exc).__name__
             # Registrar la ubicación exacta del fallo sin volcar mensajes de
             # excepciones ODBC, que podrían contener datos de conexión.
-            logger.error('Error al ejecutar solicitud %s: %s\n%s',
-                         table, type(exc).__name__,
+            logger.error('Error al ejecutar solicitud %s (id=%s): %s\n%s',
+                         table, jid, type(exc).__name__,
                          ''.join(traceback.format_tb(exc.__traceback__)))
             try:
                 supabase('PATCH', table, params={
@@ -706,7 +729,7 @@ def _external_worker():
             try:
                 _process_external_queue(table, fields, handler)
             except Exception as exc:
-                logger.warning('Fallo al consultar cola %s: %s', table, type(exc).__name__)
+                logger.error('Fallo al consultar cola %s: %s\n%s', table, type(exc).__name__, ''.join(traceback.format_tb(exc.__traceback__)))
         WORKER_LAST_POLL = time.monotonic()
         time.sleep(3)
 
