@@ -3,3 +3,4 @@ pandas
 requests
 openpyxl
 streamlit-cookies-manager
+streamlit-cookies-controller
