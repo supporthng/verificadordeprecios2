@@ -712,15 +712,24 @@ def _execute_catalog(job):
     args = ['%' + term.replace('[', '[[]').replace('%','[%]').replace('_','[_]') + '%'] * 2 if term else []
     base = f' FROM {schema}.{table}' + where
     sql_count = 'SELECT COUNT_BIG(1)' + base
-    sql_rows = (f'SELECT {code}, {description}, {price}' + base +
-                f' ORDER BY {code} OFFSET ? ROWS FETCH NEXT ? ROWS ONLY')
+    # ROW_NUMBER funciona en SQL Server 2005+ y evita OFFSET/FETCH (2012+).
+    # El código configurado se usa como orden estable; no se fija ninguna tabla.
+    sql_rows = (
+        f'SELECT paged.product_code, paged.product_name, paged.product_price '
+        f'FROM (SELECT {code} AS product_code, '
+        f'{description} AS product_name, {price} AS product_price, '
+        f'ROW_NUMBER() OVER (ORDER BY {code}) AS row_num'
+        + base + ') AS paged '
+        'WHERE paged.row_num > ? AND paged.row_num <= ? '
+        'ORDER BY paged.row_num'
+    )
     with _external_connection(cfg['host'], cfg['port'], cfg['database']) as cn:
         cur = cn.cursor()
-        # pyodbc.Cursor no admite asignar timeout en esta versión.
-        # El tiempo de conexión ya está configurado en _external_connection.
         cur.execute(sql_count, *args)
         total = int(cur.fetchone()[0])
-        cur.execute(sql_rows, *(args + [(page - 1) * size, size]))
+        start_row = (page - 1) * size
+        end_row = start_row + size
+        cur.execute(sql_rows, *(args + [start_row, end_row]))
         products = [{'barcode': str(r[0] if r[0] is not None else ''),
                      'name': str(r[1] if r[1] is not None else ''),
                      'price': str(r[2]) if r[2] is not None else None}
