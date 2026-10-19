@@ -5,7 +5,7 @@ import hmac
 import hashlib
 import base64
 import streamlit as st
-from streamlit_cookies_manager import EncryptedCookieManager
+from streamlit_cookies_controller import CookieController
 from auth_usuarios import allowed, bootstrap, cambiar_password, current_user, get_user, verificar
 
 st.set_page_config(
@@ -27,11 +27,9 @@ _cookie_secret = str(st.secrets.get("SESSION_COOKIE_KEY", "")).strip()
 if not _cookie_secret:
     st.error("Falta SESSION_COOKIE_KEY en Streamlit Secrets para activar las sesiones persistentes.")
     st.stop()
-cookies = EncryptedCookieManager(prefix="consulta_precios_", password=_cookie_secret)
-if not cookies.ready():
-    st.stop()
+cookies = CookieController()
 
-COOKIE_NAME = "login_v1"
+COOKIE_NAME = "consulta_precios_login_v2"
 COOKIE_SECONDS = 60 * 60 * 24 * 30
 
 def _token(usuario):
@@ -73,8 +71,7 @@ if not st.session_state.usuario_id:
         if restored_id:
             st.session_state.usuario_id = restored_id
         else:
-            del cookies[COOKIE_NAME]
-            cookies.save()
+            cookies.remove(COOKIE_NAME)
 
 user = current_user()
 if not user:
@@ -137,8 +134,7 @@ if not user:
                     cuenta = None
                 if valido:
                     st.session_state.usuario_id = cuenta["id"]
-                    cookies[COOKIE_NAME] = _token(cuenta)
-                    cookies.save()
+                    cookies.set(COOKIE_NAME, _token(cuenta), max_age=COOKIE_SECONDS)
                     st.session_state.fallos_login = 0
                     st.rerun()
                 else:
@@ -154,8 +150,7 @@ with st.sidebar:
     if st.button("Cerrar sesión"):
         st.session_state.usuario_id = None
         if COOKIE_NAME in cookies:
-            del cookies[COOKIE_NAME]
-            cookies.save()
+            cookies.remove(COOKIE_NAME)
         st.rerun()
 
 if user and user["must_change_password"]:
@@ -175,8 +170,7 @@ if user and user["must_change_password"]:
                 cambiar_password(user, a)
                 # La contraseña cambió: renovar cookie con el nuevo hash.
                 updated = current_user()
-                cookies[COOKIE_NAME] = _token(updated)
-                cookies.save()
+                cookies.set(COOKIE_NAME, _token(updated), max_age=COOKIE_SECONDS)
                 st.success("Contraseña cambiada.")
                 st.rerun()
             except (ValueError, RuntimeError) as exc:
