@@ -685,11 +685,12 @@ def _execute_catalog(job):
     """Listado paginado desde la fuente elegida, nunca desde una base fija."""
     rows = supabase('GET', 'external_price_sources', params={
         'id': 'eq.' + str(job['configuration_id']),
+        'enabled': 'eq.true',
         'select': 'id,engine,host,port,database,schema_name,table_name,code_column,description_column,price_column',
         'limit': '1',
     })
     if not rows:
-        raise ValueError('La configuración seleccionada ya no existe')
+        raise ValueError('La configuración seleccionada no existe o está deshabilitada')
     cfg = rows[0]
     if cfg['engine'] != 'SQL Server':
         raise ValueError('El listado externo requiere un conector compatible con este motor; actualmente SQL Server')

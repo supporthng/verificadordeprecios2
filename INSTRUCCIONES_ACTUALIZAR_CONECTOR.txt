@@ -1,0 +1,14 @@
+ACTUALIZACIÓN DEL CONECTOR WINDOWS - LISTADO EXTERNO
+
+ALCANCE: habilita el listado paginado de productos SQL Server. No cambia la pantalla de Streamlit ni las tablas de productos.
+
+1. En GitHub, abre supporthng/verificadordeprecios/windows_bridge/bridge.py.
+2. Sustituye SOLO ese archivo por windows_bridge/bridge.py incluido en este ZIP. No cambies el bridge.py de la raíz.
+3. Guarda (Commit changes). La acción .github/workflows/windows-build.yml debe compilar el conector automáticamente. También puedes abrir Actions > Construir conector Windows > Run workflow.
+4. Confirma que la compilación termina en verde. Descarga el artefacto Conector-Windows-Portatil-e-Instalador.
+5. NO reemplaces todavía el EXE que funciona. Guarda primero una copia del instalador/EXE anterior y del archivo de configuración. La instalación o actualización debe hacerse en una ventana controlada.
+6. El instalador generado por GitHub se debe probar primero en Windows; el ZIP que entregamos es CÓDIGO FUENTE, NO un EXE compilado.
+
+REQUISITO YA COMPLETADO: SQL de external_catalog_jobs ejecutado en Supabase (Success. No rows returned).
+
+NOTAS: la base de datos y las columnas se obtienen de la configuración seleccionada; no se fija monica_9_17. El nuevo listado usa consultas SELECT, COUNT y paginación. Esta versión implementa el listado para SQL Server, no para otros motores.
