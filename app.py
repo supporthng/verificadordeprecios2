@@ -199,6 +199,7 @@ def catalog():
 
 for key, default in (
     ("search_input", ""),
+    ("last_searched_barcode", ""),
     ("current_product", None),
     ("result_time", None),
     ("not_found", False),
@@ -212,9 +213,10 @@ for key, default in (
 
 
 def buscar_producto():
-    query = st.session_state.search_input.strip()
+    query = str(st.session_state.get("search_input", "")).strip()
     if not query:
         return
+    st.session_state.last_searched_barcode = query
     st.session_state.current_product = None
     st.session_state.not_found = False
     st.session_state.consult_error = None
@@ -270,7 +272,7 @@ def check_external_result():
             result = job.get("result")
             if result:
                 st.session_state.current_product = {
-                    "barcode": result.get("barcode", st.session_state.search_input),
+                    "barcode": result.get("barcode") or st.session_state.get("last_searched_barcode", ""),
                     "name": result.get("name", ""),
                     "price": result.get("price", 0),
                 }
@@ -303,6 +305,7 @@ def verificador():
             st.session_state.external_job = None
             st.session_state.result_time = None
             st.session_state.consult_error = None
+            st.session_state.last_searched_barcode = ""
     except Exception:
         st.error("No se pudo leer la fuente activa. Revisa Configuración.")
         return
@@ -316,7 +319,8 @@ def verificador():
         st.session_state.not_found = False
         st.session_state.consult_error = None
         st.session_state.result_time = None
-        st.session_state.search_input = ""
+        # El widget puede no existir cuando se muestra un resultado.
+        # Streamlit limpia automaticamente su estado al ocultarlo.
 
     product = st.session_state.current_product
 
