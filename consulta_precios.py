@@ -56,8 +56,8 @@ CSS = """
 <style>
 .stApp { background: #f4f7fc; }
 .block-container {
-    max-width: 950px;
-    padding: 1rem 1rem 2rem;
+    max-width: 100%;
+    padding: .5rem .8rem 1rem;
 }
 #MainMenu, footer { visibility: hidden; }
 header[data-testid="stHeader"] { background: transparent; }
@@ -102,6 +102,43 @@ div[data-testid="stTextInput"] input {
     text-align: center;
     margin: 10px auto;
     box-shadow: 0 7px 25px rgba(20,50,90,.07);
+}
+/* Resultado ampliado para pantallas de verificadores de precios. */
+.product-card.result-card {
+    width: 100%;
+    min-height: 76dvh;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(8px, 1.5vh, 18px);
+    padding: clamp(16px, 3vw, 40px);
+    margin: 0 auto;
+}
+.result-card .product-name {
+    font-size: clamp(28px, 5.5vw, 66px);
+    margin: 2px 0;
+}
+.result-card .product-code {
+    font-size: clamp(17px, 2.5vw, 26px);
+    margin: 0;
+}
+.result-card .product-price {
+    font-size: clamp(54px, 10vw, 126px);
+    margin: 0;
+}
+.result-card .product-label, .result-card .price-label {
+    font-size: clamp(15px, 2vw, 23px);
+}
+@media (max-width: 600px) {
+    .product-card.result-card { min-height: 72dvh; }
+    .result-card .product-price { font-size: clamp(42px, 11vw, 78px); }
+}
+@media (orientation: landscape) and (max-height: 650px) {
+    .product-card.result-card { min-height: 79dvh; padding: 10px 22px; gap: 6px; }
+    .result-card .product-name { font-size: clamp(28px, 5vw, 58px); }
+    .result-card .product-price { font-size: clamp(55px, 9vw, 110px); }
 }
 .product-label, .price-label {
     color: #64748b;
@@ -209,9 +246,6 @@ for key, default in (
     ("not_found", False),
     ("external_job", None),
     ("external_started", None),
-    ("lookup_started", None),
-    ("lookup_duration", None),
-    ("diag", {}),
     ("consult_error", None),
     ("source_snapshot", None),
 ):
@@ -224,18 +258,13 @@ def buscar_producto():
     if not query:
         return
     st.session_state.last_searched_barcode = query
-    st.session_state.lookup_started = time.monotonic()
-    st.session_state.lookup_duration = None
-    st.session_state.diag = {"polls": 0, "get_seconds": 0.0, "statuses": []}
     st.session_state.current_product = None
     st.session_state.not_found = False
     st.session_state.consult_error = None
     st.session_state.external_job = None
     st.session_state.result_time = None
     try:
-        t_source = time.monotonic()
         mode, source_id = active_source()
-        st.session_state.diag["source_seconds"] = round(time.monotonic() - t_source, 3)
         if mode == "local":
             df = catalog()
             hits = df[df["barcode"].astype(str).str.strip() == query].head(1)
@@ -244,28 +273,23 @@ def buscar_producto():
             else:
                 st.session_state.current_product = hits.iloc[0].to_dict()
             st.session_state.result_time = time.monotonic()
-            st.session_state.lookup_duration = round(st.session_state.result_time - st.session_state.lookup_started, 2)
         else:
-            t_post = time.monotonic()
             rows = admin_api("POST", "external_price_jobs", payload={
                 "configuration_id": source_id,
                 "barcode": query,
                 "status": "pending",
                 "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=2)).isoformat(),
             })
-            st.session_state.diag["post_seconds"] = round(time.monotonic() - t_post, 3)
             if not rows or not rows[0].get("id"):
                 raise RuntimeError("No se pudo registrar la consulta externa")
             st.session_state.external_job = rows[0]["id"]
             st.session_state.external_started = time.monotonic()
-    except Exception:
+    except Exception as exc:
         st.session_state.consult_error = (
             "No se pudo consultar la fuente seleccionada. "
             "Revisa la configuración y el conector Windows."
         )
         st.session_state.result_time = time.monotonic()
-        if st.session_state.get("lookup_started") is not None:
-            st.session_state.lookup_duration = round(st.session_state.result_time - st.session_state.lookup_started, 2)
 
 
 def check_external_result():
@@ -278,23 +302,13 @@ def check_external_result():
             "La base externa no respondió a tiempo. No se consultó la base local."
         )
         st.session_state.result_time = time.monotonic()
-        if st.session_state.get("lookup_started") is not None:
-            st.session_state.lookup_duration = round(st.session_state.result_time - st.session_state.lookup_started, 2)
         return
     try:
-        t_get = time.monotonic()
         rows = admin_api("GET", "external_price_jobs",
                          params={"id": "eq." + jid, "select": "status,result,error_message"})
-        elapsed_get = time.monotonic() - t_get
-        diag = st.session_state.diag
-        diag["polls"] += 1
-        diag["get_seconds"] = round(diag["get_seconds"] + elapsed_get, 3)
         if not rows:
             raise RuntimeError("La solicitud externa no existe.")
         job = rows[0]
-        status = str(job.get("status", "unknown"))
-        if not diag["statuses"] or diag["statuses"][-1][0] != status:
-            diag["statuses"].append((status, round(time.monotonic() - st.session_state.lookup_started, 2)))
         if job["status"] == "done":
             result = job.get("result")
             if result:
@@ -307,20 +321,16 @@ def check_external_result():
                 st.session_state.not_found = True
             st.session_state.external_job = None
             st.session_state.result_time = time.monotonic()
-            if st.session_state.get("lookup_started") is not None:
-                st.session_state.lookup_duration = round(st.session_state.result_time - st.session_state.lookup_started, 2)
         elif job["status"] == "error":
             st.session_state.external_job = None
             st.session_state.consult_error = (
                 "No se pudo consultar SQL Server. Revisa el conector y la conexión externa."
             )
             st.session_state.result_time = time.monotonic()
-    except (requests.RequestException, RuntimeError):
+    except (requests.RequestException, RuntimeError) as exc:
         st.session_state.external_job = None
         st.session_state.consult_error = "No se pudo obtener la respuesta de la base externa."
         st.session_state.result_time = time.monotonic()
-        if st.session_state.get("lookup_started") is not None:
-            st.session_state.lookup_duration = round(st.session_state.result_time - st.session_state.lookup_started, 2)
 
 
 @st.fragment(run_every=0.25)
@@ -337,8 +347,6 @@ def verificador():
             st.session_state.result_time = None
             st.session_state.consult_error = None
             st.session_state.last_searched_barcode = ""
-            st.session_state.lookup_duration = None
-            st.session_state.lookup_started = None
     except Exception:
         st.error("No se pudo leer la fuente activa. Revisa Configuración.")
         return
@@ -355,7 +363,6 @@ def verificador():
         st.session_state.not_found = False
         st.session_state.consult_error = None
         st.session_state.result_time = None
-        st.session_state.lookup_duration = None
         # El widget puede no existir cuando se muestra un resultado.
         # Streamlit limpia automaticamente su estado al ocultarlo.
 
@@ -367,7 +374,7 @@ def verificador():
         price = float(product["price"])
 
         st.markdown(
-            '<div class="product-card">'
+            '<div class="product-card result-card">'
             '<div class="product-label">PRODUCTO</div>'
             f'<div class="product-name">{name}</div>'
             f'<div class="product-code">Código: {barcode}</div>'
@@ -379,8 +386,6 @@ def verificador():
 
     elif st.session_state.consult_error:
         st.error(st.session_state.consult_error)
-        if st.session_state.get("lookup_duration") is not None:
-            st.caption(f"Tiempo transcurrido: {st.session_state.lookup_duration:.2f} segundos")
     elif st.session_state.external_job:
         # Solo se muestra una animación amigable; no exponer detalles técnicos.
         st.markdown(
