@@ -12,6 +12,7 @@ pages = {
     "Configuración": [
         st.Page("pages/2_Fuentes_de_datos.py", title="Fuentes de Datos", icon="🔌"),
         st.Page("pages/3_Consulta_Bases_de_Datos.py", title="Configurar Consulta", icon="⚙️"),
+        st.Page("pages/3_Logo_del_negocio.py", title="Logo del Negocio", icon="🖼️"),
     ],
 }
 st.navigation(pages, position="sidebar").run()
