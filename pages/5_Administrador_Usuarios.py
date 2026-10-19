@@ -30,7 +30,7 @@ if admin["role"] != "admin":
 st.subheader("Crear usuario")
 with st.form("crear_usuario"):
     username = st.text_input("Nombre de usuario")
-    password = st.text_input("Contraseña temporal", type="password")
+    password = st.text_input("Contraseña", type="password")
     role = st.selectbox("Rol", ["usuario", "admin"])
     perms = st.multiselect("Permisos", options=list(PERMISOS), format_func=lambda p: PERMISOS[p])
     submit = st.form_submit_button("Crear usuario")
@@ -39,7 +39,7 @@ if submit:
     if not username or not all(c.isalnum() or c in "._-" for c in username):
         st.error("Nombre de usuario inválido.")
     elif len(password) < 8:
-        st.error("La contraseña temporal debe tener al menos 8 caracteres.")
+        st.error("La contraseña debe tener al menos 8 caracteres.")
     else:
         try:
             if get_user(username):
@@ -47,8 +47,8 @@ if submit:
             else:
                 api("POST", data={"username": username, "password_hash": hash_password(password),
                                   "role": role, "permissions": perms, "active": True,
-                                  "must_change_password": True})
-                st.success("Usuario creado. Deberá cambiar su contraseña al entrar.")
+                                  "must_change_password": False})
+                st.success("Usuario creado. Puede iniciar sesión con la contraseña asignada.")
         except RuntimeError as exc:
             st.error(str(exc))
 
@@ -68,19 +68,19 @@ for u in users:
                 default=[p for p in u["permissions"] or [] if p in PERMISOS],
                 format_func=lambda p: PERMISOS[p], key="perms_"+str(u["id"]))
             active = st.checkbox("Cuenta activa", value=u["active"], key="activo_"+str(u["id"]))
-            reset = st.text_input("Nueva contraseña temporal (opcional, mínimo 8 caracteres)",
+            reset = st.text_input("Nueva contraseña (opcional, mínimo 8 caracteres)",
                 type="password", key="reset_"+str(u["id"]))
             save = st.form_submit_button("Guardar cambios")
         if save:
             if u["id"] == admin["id"] and (not active or role != "admin"):
                 st.error("No puedes quitarte tu propio acceso de administrador.")
             elif reset and len(reset) < 8:
-                st.error("La contraseña temporal debe tener al menos 8 caracteres.")
+                st.error("La contraseña debe tener al menos 8 caracteres.")
             else:
                 changes = {"role": role, "permissions": perms, "active": active}
                 if reset:
                     changes.update(password_hash=hash_password(reset),
-                                   must_change_password=True)
+                                   must_change_password=False)
                 try:
                     api("PATCH", {"id": "eq." + str(u["id"])}, changes)
                     st.success("Cambios guardados.")
