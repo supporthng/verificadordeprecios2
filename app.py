@@ -205,6 +205,8 @@ for key, default in (
     ("not_found", False),
     ("external_job", None),
     ("external_started", None),
+    ("lookup_started", None),
+    ("lookup_duration", None),
     ("consult_error", None),
     ("source_snapshot", None),
 ):
@@ -217,6 +219,8 @@ def buscar_producto():
     if not query:
         return
     st.session_state.last_searched_barcode = query
+    st.session_state.lookup_started = time.monotonic()
+    st.session_state.lookup_duration = None
     st.session_state.current_product = None
     st.session_state.not_found = False
     st.session_state.consult_error = None
@@ -232,6 +236,7 @@ def buscar_producto():
             else:
                 st.session_state.current_product = hits.iloc[0].to_dict()
             st.session_state.result_time = time.monotonic()
+            st.session_state.lookup_duration = round(st.session_state.result_time - st.session_state.lookup_started, 2)
         else:
             rows = admin_api("POST", "external_price_jobs", payload={
                 "configuration_id": source_id,
@@ -249,6 +254,8 @@ def buscar_producto():
             "Revisa la configuración y el conector Windows."
         )
         st.session_state.result_time = time.monotonic()
+        if st.session_state.get("lookup_started") is not None:
+            st.session_state.lookup_duration = round(st.session_state.result_time - st.session_state.lookup_started, 2)
 
 
 def check_external_result():
@@ -261,6 +268,8 @@ def check_external_result():
             "La base externa no respondió a tiempo. No se consultó la base local."
         )
         st.session_state.result_time = time.monotonic()
+        if st.session_state.get("lookup_started") is not None:
+            st.session_state.lookup_duration = round(st.session_state.result_time - st.session_state.lookup_started, 2)
         return
     try:
         rows = admin_api("GET", "external_price_jobs",
@@ -280,6 +289,8 @@ def check_external_result():
                 st.session_state.not_found = True
             st.session_state.external_job = None
             st.session_state.result_time = time.monotonic()
+            if st.session_state.get("lookup_started") is not None:
+                st.session_state.lookup_duration = round(st.session_state.result_time - st.session_state.lookup_started, 2)
         elif job["status"] == "error":
             st.session_state.external_job = None
             st.session_state.consult_error = (
@@ -290,9 +301,11 @@ def check_external_result():
         st.session_state.external_job = None
         st.session_state.consult_error = "No se pudo obtener la respuesta de la base externa."
         st.session_state.result_time = time.monotonic()
+        if st.session_state.get("lookup_started") is not None:
+            st.session_state.lookup_duration = round(st.session_state.result_time - st.session_state.lookup_started, 2)
 
 
-@st.fragment(run_every=0.5)
+@st.fragment(run_every=0.25)
 def verificador():
     # Evitar mostrar resultados de una fuente distinta si el administrador la cambia.
     try:
@@ -306,6 +319,8 @@ def verificador():
             st.session_state.result_time = None
             st.session_state.consult_error = None
             st.session_state.last_searched_barcode = ""
+            st.session_state.lookup_duration = None
+            st.session_state.lookup_started = None
     except Exception:
         st.error("No se pudo leer la fuente activa. Revisa Configuración.")
         return
@@ -319,6 +334,7 @@ def verificador():
         st.session_state.not_found = False
         st.session_state.consult_error = None
         st.session_state.result_time = None
+        st.session_state.lookup_duration = None
         # El widget puede no existir cuando se muestra un resultado.
         # Streamlit limpia automaticamente su estado al ocultarlo.
 
@@ -339,9 +355,13 @@ def verificador():
             '</div>',
             unsafe_allow_html=True,
         )
+        if st.session_state.get("lookup_duration") is not None:
+            st.caption(f"Tiempo de consulta: {st.session_state.lookup_duration:.2f} segundos")
 
     elif st.session_state.consult_error:
         st.error(st.session_state.consult_error)
+        if st.session_state.get("lookup_duration") is not None:
+            st.caption(f"Tiempo transcurrido: {st.session_state.lookup_duration:.2f} segundos")
     elif st.session_state.external_job:
         st.info("Consultando la base de datos externa desde Windows…")
     elif st.session_state.not_found:
