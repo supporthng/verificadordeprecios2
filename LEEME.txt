@@ -1,11 +1,22 @@
-PRUEBA DE CONEXION REAL - Fuentes de datos
-
-1. Ejecuta supabase_prueba_conexion.sql en Supabase SQL Editor.
-2. Sustituye pages/2_Fuentes_de_datos.py por 2_Fuentes_de_datos.py.
-3. Sustituye bridge.py por bridge.py del paquete.
-4. GitHub Actions: compila el conector Windows, instala la versión nueva y reinicia la tarea ConsultaPreciosConectorLAN.
-5. Verifica http://127.0.0.1:8765/health y pulsa Probar conexion en Fuentes de datos.
-
-No modifica app.py ni el verificador de Supabase. La prueba abre la base de datos guardada y ejecuta SELECT DB_NAME(), 1.
-Por ahora esta prueba soporta SQL Server; otras bases requieren adaptadores.
-No publiques el puerto 8765 a Internet.
+INSTALACIÓN (antes de activar usuarios)
+1. Ejecuta INSTALAR_TABLA.sql en Supabase > SQL Editor.
+2. Copia auth_usuarios.py a la raíz del repositorio.
+3. Copia app.py a la raíz y pages/5_Administrador_Usuarios.py a pages/.
+4. IMPORTANTE: En la PRIMERA línea ejecutable de CADA página administrativa
+   existente, después de los imports, agrega:
+       from auth_usuarios import require
+       require("cargar_archivo")     # pages/1_Administracion.py
+       require("consultar_base")     # pages/4_Listado_Productos.py
+       require("fuentes")            # pages/2_Fuentes_de_datos.py
+       require("configurar")         # pages/3_Consulta_Bases_de_Datos.py
+       require("logo")               # pages/3_Logo_del_negocio.py
+   Esto es imprescindible: ocultar páginas en el menú NO protege operaciones.
+5. En la página del logo, elimina la validación anterior LOGO_ADMIN_PASSWORD
+   una vez activada la nueva protección con require("logo").
+6. Publica cambios. En el menú lateral, inicia sesión con admin / admin.
+   Se exige cambiar la contraseña inmediatamente por una de >= 10 caracteres.
+7. Conserva SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY en Streamlit Secrets.
+   Nunca publiques SERVICE_ROLE_KEY en GitHub.
+NOTAS: El bloqueo por intentos es por sesión de navegador, no global.
+Para producción con usuarios múltiples, implementar bloqueo global y auditoría
+en servidor; las credenciales técnicas siguen en Secrets.
