@@ -9,7 +9,6 @@ from datetime import datetime, timedelta, timezone
 import requests
 import streamlit as st
 
-st.set_page_config(page_title='Configuración de bases externas', page_icon='⚙️', layout='centered')
 st.title('⚙️ Configuración de bases de datos externas')
 st.caption('Detecta servidores, bases, tablas y columnas. La consulta de precios se realiza en el verificador principal.')
 

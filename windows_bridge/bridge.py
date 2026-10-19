@@ -680,6 +680,51 @@ def _execute_price(job):
                 'price': str(row[2])}
 
 
+
+def _execute_catalog(job):
+    """Listado paginado desde la fuente elegida, nunca desde una base fija."""
+    rows = supabase('GET', 'external_price_sources', params={
+        'id': 'eq.' + str(job['configuration_id']),
+        'select': 'id,engine,host,port,database,schema_name,table_name,code_column,description_column,price_column',
+        'limit': '1',
+    })
+    if not rows:
+        raise ValueError('La configuración seleccionada ya no existe')
+    cfg = rows[0]
+    if cfg['engine'] != 'SQL Server':
+        raise ValueError('El listado externo requiere un conector compatible con este motor; actualmente SQL Server')
+    schema = _sql_identifier(cfg.get('schema_name') or 'dbo')
+    table = _sql_identifier(cfg['table_name'])
+    code = _sql_identifier(cfg['code_column'])
+    description = _sql_identifier(cfg['description_column'])
+    price = _sql_identifier(cfg['price_column'])
+    page = int(job.get('page_number') or 1)
+    size = int(job.get('page_size') or 25)
+    if page < 1 or not 1 <= size <= 100:
+        raise ValueError('Paginación inválida')
+    term = str(job.get('search_term') or '').strip()
+    if len(term) > 120:
+        raise ValueError('Filtro demasiado largo')
+    # Convertir código a texto para permitir búsqueda incluso si su tipo es numérico.
+    where = (f' WHERE (CONVERT(nvarchar(255), {code}) LIKE ? '
+             f'OR CONVERT(nvarchar(4000), {description}) LIKE ?)') if term else ''
+    args = ['%' + term.replace('[', '[[]').replace('%','[%]').replace('_','[_]') + '%'] * 2 if term else []
+    base = f' FROM {schema}.{table}' + where
+    sql_count = 'SELECT COUNT_BIG(1)' + base
+    sql_rows = (f'SELECT {code}, {description}, {price}' + base +
+                f' ORDER BY {code} OFFSET ? ROWS FETCH NEXT ? ROWS ONLY')
+    with _external_connection(cfg['host'], cfg['port'], cfg['database']) as cn:
+        cur = cn.cursor()
+        cur.timeout = 20
+        cur.execute(sql_count, *args)
+        total = int(cur.fetchone()[0])
+        cur.execute(sql_rows, *(args + [(page - 1) * size, size]))
+        products = [{'barcode': str(r[0] if r[0] is not None else ''),
+                     'name': str(r[1] if r[1] is not None else ''),
+                     'price': str(r[2]) if r[2] is not None else None}
+                    for r in cur.fetchall()]
+    return {'total': total, 'products': products, 'page': page, 'page_size': size}
+
 def _process_external_queue(table, select, execute):
     global WORKER_LAST_JOB, WORKER_LAST_ERROR, WORKER_JOB_COUNT
     now = datetime.now(timezone.utc).isoformat()
@@ -728,6 +773,8 @@ def _external_worker():
              'id,kind,host,port,database,schema_name,table_name', _execute_metadata),
             ('external_price_jobs',
              'id,configuration_id,barcode', _execute_price),
+            ('external_catalog_jobs',
+             'id,configuration_id,page_number,page_size,search_term', _execute_catalog),
         ):
             try:
                 _process_external_queue(table, fields, handler)

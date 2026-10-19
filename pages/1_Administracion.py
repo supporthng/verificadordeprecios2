@@ -21,11 +21,7 @@ from shared import (
 # CONFIGURACION
 # ==========================================
 
-st.set_page_config(
-    page_title="Administración de precios",
-    page_icon="🔒",
-    layout="wide",
-)
+
 
 RD_TZ = ZoneInfo("America/Santo_Domingo")
 

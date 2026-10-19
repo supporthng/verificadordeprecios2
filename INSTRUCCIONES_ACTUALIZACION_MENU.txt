@@ -1,0 +1,19 @@
+ACTUALIZACIÓN: MENÚ Y LISTADO DE PRODUCTOS
+
+1. Antes de empezar, conserva una copia del repositorio actual.
+2. En Supabase SQL Editor, ejecuta supabase_listado_productos.sql UNA VEZ.
+3. En GitHub, sube estos archivos respetando las rutas:
+   app.py
+   consulta_precios.py
+   pages/1_Administracion.py
+   pages/3_Consulta_Bases_de_Datos.py
+   pages/4_Listado_Productos.py
+   supabase_listado_productos.sql
+4. Comprueba el nuevo menú y el listado del archivo local/Supabase.
+5. Para listar productos de una base EXTERNA, el conector Windows instalado también debe actualizarse con windows_bridge/bridge.py y reconstruirse mediante el procedimiento de instalación que ya uses. Subir ese archivo a GitHub NO actualiza el ejecutable instalado automáticamente. No desinstales ni sustituyas el conector operativo sin respaldo y una ventana de mantenimiento.
+
+NOTAS:
+- Las consultas de precios actuales no necesitan la nueva tabla para seguir funcionando.
+- La búsqueda de productos externos en el listado usa SQL Server; otros motores necesitan implementación específica en el conector.
+- La lista externa NO funcionará hasta que se actualice el ejecutable Windows.
+- El código pasó comprobación de sintaxis, pero NO se ha probado con tu Streamlit, Supabase o SQL Server reales.
