@@ -347,7 +347,10 @@ def verificador():
         check_external_result()
     started = st.session_state.result_time
 
-    if started is not None and time.monotonic() - started >= 10:
+    # Los códigos inexistentes vuelven antes al lector; los productos encontrados
+    # conservan el tiempo habitual para leer el precio.
+    display_seconds = 3 if st.session_state.not_found else 10
+    if started is not None and time.monotonic() - started >= display_seconds:
         st.session_state.current_product = None
         st.session_state.not_found = False
         st.session_state.consult_error = None
