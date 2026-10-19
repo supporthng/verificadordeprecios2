@@ -207,6 +207,7 @@ for key, default in (
     ("external_started", None),
     ("lookup_started", None),
     ("lookup_duration", None),
+    ("diag", {}),
     ("consult_error", None),
     ("source_snapshot", None),
 ):
@@ -221,13 +222,16 @@ def buscar_producto():
     st.session_state.last_searched_barcode = query
     st.session_state.lookup_started = time.monotonic()
     st.session_state.lookup_duration = None
+    st.session_state.diag = {"polls": 0, "get_seconds": 0.0, "statuses": []}
     st.session_state.current_product = None
     st.session_state.not_found = False
     st.session_state.consult_error = None
     st.session_state.external_job = None
     st.session_state.result_time = None
     try:
+        t_source = time.monotonic()
         mode, source_id = active_source()
+        st.session_state.diag["source_seconds"] = round(time.monotonic() - t_source, 3)
         if mode == "local":
             df = catalog()
             hits = df[df["barcode"].astype(str).str.strip() == query].head(1)
@@ -238,12 +242,14 @@ def buscar_producto():
             st.session_state.result_time = time.monotonic()
             st.session_state.lookup_duration = round(st.session_state.result_time - st.session_state.lookup_started, 2)
         else:
+            t_post = time.monotonic()
             rows = admin_api("POST", "external_price_jobs", payload={
                 "configuration_id": source_id,
                 "barcode": query,
                 "status": "pending",
                 "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=2)).isoformat(),
             })
+            st.session_state.diag["post_seconds"] = round(time.monotonic() - t_post, 3)
             if not rows or not rows[0].get("id"):
                 raise RuntimeError("No se pudo registrar la consulta externa")
             st.session_state.external_job = rows[0]["id"]
@@ -272,11 +278,19 @@ def check_external_result():
             st.session_state.lookup_duration = round(st.session_state.result_time - st.session_state.lookup_started, 2)
         return
     try:
+        t_get = time.monotonic()
         rows = admin_api("GET", "external_price_jobs",
                          params={"id": "eq." + jid, "select": "status,result,error_message"})
+        elapsed_get = time.monotonic() - t_get
+        diag = st.session_state.diag
+        diag["polls"] += 1
+        diag["get_seconds"] = round(diag["get_seconds"] + elapsed_get, 3)
         if not rows:
             raise RuntimeError("La solicitud externa no existe.")
         job = rows[0]
+        status = str(job.get("status", "unknown"))
+        if not diag["statuses"] or diag["statuses"][-1][0] != status:
+            diag["statuses"].append((status, round(time.monotonic() - st.session_state.lookup_started, 2)))
         if job["status"] == "done":
             result = job.get("result")
             if result:
@@ -357,6 +371,16 @@ def verificador():
         )
         if st.session_state.get("lookup_duration") is not None:
             st.caption(f"Tiempo de consulta: {st.session_state.lookup_duration:.2f} segundos")
+            diag = st.session_state.get("diag", {})
+            if diag.get("polls"):
+                st.caption(
+                    f"Diagnóstico: origen {diag.get('source_seconds', 0):.2f}s · "
+                    f"crear solicitud {diag.get('post_seconds', 0):.2f}s · "
+                    f"lecturas {diag['polls']} ({diag['get_seconds']:.2f}s de red)"
+                )
+                st.caption("Estados: " + " → ".join(
+                    f"{state} a los {elapsed:.2f}s" for state, elapsed in diag.get("statuses", [])
+                ))
 
     elif st.session_state.consult_error:
         st.error(st.session_state.consult_error)
