@@ -537,50 +537,70 @@ def _consulta_lector_global():
 
 st.markdown("""
 <style>
-/* El campo auxiliar recibe el codigo sin ocupar espacio en la pantalla. */
-div[data-testid="stTextInput"]:has(input[aria-label="Lector global oculto"]) { display:none !important; }
+/* Oculto visualmente, pero sigue siendo un input real y editable para Streamlit. */
+div[data-testid="stTextInput"]:has(input[aria-label="Lector global oculto"]) {
+    position: absolute !important;
+    left: -10000px !important;
+    width: 1px !important;
+    height: 1px !important;
+    overflow: hidden !important;
+}
 </style>
 """, unsafe_allow_html=True)
 st.text_input("Lector global oculto", key="lector_global", on_change=_consulta_lector_global,
               label_visibility="collapsed")
 
-# El lector transmite los digitos muy rapidamente y finaliza con Enter.
-# Ignorar pulsaciones lentas evita interferir con la navegacion y las contrasenas.
+# Captura el texto completo del lector HID incluso cuando otro elemento tiene el foco.
+# Un lector debe enviar caracteres seguidos de Enter; no se interceptan teclas de
+# navegación ni combinaciones con Ctrl/Alt/Meta.
 components.html(r"""
 <script>
 (function () {
   try {
-    const doc = window.parent.document;
-    if (window.parent.__wilposScannerInstalled) return;
-    window.parent.__wilposScannerInstalled = true;
-    let buffer = '', last = 0;
-    doc.addEventListener('keydown', function(e) {
-      if (e.ctrlKey || e.altKey || e.metaKey || e.isComposing) return;
+    const win = window.parent;
+    const doc = win.document;
+    // Sustituir el manejador en cada rerun para evitar referencias obsoletas.
+    if (win.__wilposScannerHandler) {
+      doc.removeEventListener('keydown', win.__wilposScannerHandler, true);
+    }
+    let buffer = '', last = 0, first = 0;
+    function handleKey(e) {
+      if (e.ctrlKey || e.altKey || e.metaKey || e.isComposing || e.repeat) return;
       const now = Date.now();
       if (e.key === 'Enter') {
         const scanned = buffer;
-        buffer = '';
-        if (scanned.length < 5 || now - last > 250) return;
+        const duration = now - first;
+        const pause = now - last;
+        buffer = ''; last = 0; first = 0;
+        if (scanned.length < 5 || pause > 350 || duration > Math.max(700, scanned.length * 130)) return;
         const target = doc.querySelector('input[aria-label="Lector global oculto"]');
         if (!target) return;
         e.preventDefault();
         e.stopImmediatePropagation();
-        const setter = Object.getOwnPropertyDescriptor(window.parent.HTMLInputElement.prototype, 'value').set;
+        // Usar el setter nativo permite que React/Streamlit detecte el cambio.
+        const setter = Object.getOwnPropertyDescriptor(win.HTMLInputElement.prototype, 'value').set;
         setter.call(target, scanned);
-        target.dispatchEvent(new window.parent.Event('input', { bubbles: true }));
-        target.dispatchEvent(new window.parent.KeyboardEvent('keydown', {key:'Enter', code:'Enter', bubbles:true}));
-        target.dispatchEvent(new window.parent.KeyboardEvent('keyup', {key:'Enter', code:'Enter', bubbles:true}));
+        target.dispatchEvent(new win.Event('input', { bubbles: true }));
+        target.dispatchEvent(new win.Event('change', { bubbles: true }));
+        // El commit de Streamlit se produce al perder foco o al pulsar Enter.
+        target.focus({preventScroll:true});
+        setTimeout(function () {
+          target.dispatchEvent(new win.KeyboardEvent('keydown', {key:'Enter', code:'Enter', bubbles:true}));
+          target.dispatchEvent(new win.KeyboardEvent('keyup', {key:'Enter', code:'Enter', bubbles:true}));
+          target.blur();
+        }, 80);
         return;
       }
-      if (e.key.length !== 1) { buffer = ''; return; }
-      if (now - last > 120) buffer = '';
-      if (/^[0-9A-Za-z._-]$/.test(e.key)) buffer += e.key;
-      else buffer = '';
+      if (e.key.length !== 1 || !/^[0-9A-Za-z._-]$/.test(e.key)) {
+        buffer = ''; last = 0; first = 0; return;
+      }
+      if (now - last > 200) { buffer = ''; first = now; }
+      buffer += e.key;
       last = now;
-    }, true);
-  } catch(err) {
-    // Algunos navegadores pueden impedir el acceso al documento padre.
-  }
+    }
+    win.__wilposScannerHandler = handleKey;
+    doc.addEventListener('keydown', handleKey, true);
+  } catch(err) { /* Restricciones del navegador */ }
 })();
 </script>
 """, height=0)
