@@ -7,7 +7,7 @@ st.set_page_config(
     page_title="Consulta de Precios",
     page_icon="🏷️",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="collapsed",
 )
 
 try:
