@@ -1,4 +1,6 @@
 import html
+from io import BytesIO
+from PIL import Image, ImageOps
 from datetime import datetime, timedelta, timezone
 import time
 from pathlib import Path
@@ -477,9 +479,20 @@ def verificador():
         logo = cargar_logo_negocio()
         if logo:
             st.markdown('<div class="business-logo-label">NUESTRO NEGOCIO</div>', unsafe_allow_html=True)
-            _, centro, _ = st.columns([1, 3, 1])
-            with centro:
-                st.image(logo, use_container_width=True)
+            # Logo en la misma columna central y ancho que la imagen del codigo de barras.
+            try:
+                with Image.open(BytesIO(logo)) as original:
+                    imagen = ImageOps.contain(original.convert("RGBA"), (180, 120))
+                    lienzo = Image.new("RGBA", (180, 120), (255, 255, 255, 0))
+                    lienzo.alpha_composite(
+                        imagen,
+                        ((180 - imagen.width) // 2, (120 - imagen.height) // 2),
+                    )
+                    izquierda, centro, derecha = st.columns([2, 1, 2])
+                    with centro:
+                        st.image(lienzo, use_container_width=True)
+            except (OSError, ValueError):
+                pass
 
 
 try:
