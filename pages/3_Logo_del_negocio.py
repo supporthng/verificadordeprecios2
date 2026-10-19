@@ -1,99 +1,96 @@
-"""Pagina administrativa para cargar el logo del verificador."""
+import html
 from io import BytesIO
-import hmac
+from PIL import Image, ImageOps
+from datetime import datetime, timedelta, timezone
+import time
+from pathlib import Path
 
+import pandas as pd
 import requests
 import streamlit as st
-from PIL import Image, UnidentifiedImageError
 
-st.set_page_config(page_title="Logo del negocio", page_icon="🖼️", layout="centered")
-st.title("🖼️ Logo del negocio")
-st.write("Sube el logo que aparecera debajo del lector de codigo en Consulta de precios.")
 
-url = str(st.secrets.get("SUPABASE_URL", "")).strip().rstrip("/")
-key = str(st.secrets.get("SUPABASE_SERVICE_ROLE_KEY", "")).strip()
-admin_password = str(st.secrets.get("LOGO_ADMIN_PASSWORD", ""))
 
-if not admin_password:
-    st.error("Configura LOGO_ADMIN_PASSWORD en los Secrets de Streamlit para proteger esta pagina.")
-    st.stop()
+SUPABASE_URL = str(st.secrets.get("SUPABASE_URL", "")).strip().rstrip("/")
+SUPABASE_ANON_KEY = str(st.secrets.get("SUPABASE_ANON_KEY", "")).strip()
 
-password = st.text_input("Contraseña de administrador", type="password")
-if not hmac.compare_digest(password, admin_password):
-    if password:
-        st.error("Contraseña incorrecta.")
-    st.stop()
+SUPABASE_SERVICE_ROLE_KEY = str(st.secrets.get("SUPABASE_SERVICE_ROLE_KEY", "")).strip()
 
-if not url or not key:
-    st.error("Falta configurar SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY.")
-    st.stop()
+def admin_api(method, table, params=None, payload=None):
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        raise RuntimeError("Falta SUPABASE_SERVICE_ROLE_KEY en Secrets.")
+    headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": "Bearer " + SUPABASE_SERVICE_ROLE_KEY,
+        "Content-Type": "application/json",
+        "Prefer": "return=representation",
+    }
+    response = requests.request(
+        method, f"{SUPABASE_URL}/rest/v1/{table}",
+        params=params, json=payload, headers=headers, timeout=12,
+    )
+    response.raise_for_status()
+    return response.json()
 
-headers = {"apikey": key, "Authorization": "Bearer " + key}
-archivo = st.file_uploader("Selecciona un logo JPG o PNG", type=["jpg", "jpeg", "png"])
-if archivo is not None:
+
+@st.cache_data(ttl=4, show_spinner=False)
+def active_source():
+    settings = admin_api("GET", "price_source_settings",
+                         params={"id": "eq.1", "select": "source_type"})
+    if not settings:
+        raise RuntimeError("Falta configurar el origen de datos.")
+    mode = settings[0]["source_type"]
+    if mode == "local":
+        return mode, None
+    if mode != "external":
+        raise RuntimeError("Origen de datos desconocido.")
+    sources = admin_api("GET", "external_price_sources",
+                        params={"enabled": "eq.true", "select": "id,name", "limit": "2"})
+    if len(sources) != 1:
+        raise RuntimeError(
+            "La fuente externa requiere exactamente una configuración habilitada. "
+            "Configúrala en Fuentes de datos."
+        )
+    return mode, sources[0]["id"]
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def cargar_logo_negocio():
+    """Lee el logo persistente desde Supabase Storage, sin hacerlo publico."""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        return None
     try:
-        imagen = Image.open(archivo)
-        imagen.verify()
-        archivo.seek(0)
-        imagen = Image.open(archivo)
-        imagen.thumbnail((1400, 900))
-        if imagen.mode not in ("RGB", "RGBA"):
-            imagen = imagen.convert("RGBA")
-        buffer = BytesIO()
-        imagen.save(buffer, format="PNG", optimize=True)
-        logo_png = buffer.getvalue()
-        st.image(logo_png, caption="Vista previa", use_container_width=True)
-    except (UnidentifiedImageError, OSError, ValueError):
-        st.error("La imagen no es valida.")
-        st.stop()
+        response = requests.get(
+            f"{SUPABASE_URL}/storage/v1/object/logo-negocio/logo.png",
+            headers={
+                "apikey": SUPABASE_SERVICE_ROLE_KEY,
+                "Authorization": "Bearer " + SUPABASE_SERVICE_ROLE_KEY,
+            },
+            timeout=8,
+        )
+        if response.status_code == 200 and response.headers.get("content-type", "").startswith("image/"):
+            return response.content
+    except requests.RequestException:
+        pass
+    return None
 
-    if st.button("Guardar logo", type="primary", use_container_width=True):
-        try:
-            # Consultar primero: Supabase puede devolver 400 si el bucket ya existe.
-            consulta = requests.get(
-                f"{url}/storage/v1/bucket/logo-negocio",
-                headers=headers,
-                timeout=15,
-            )
-            if consulta.status_code == 404:
-                bucket = requests.post(
-                    f"{url}/storage/v1/bucket",
-                    headers={**headers, "Content-Type": "application/json"},
-                    json={"id": "logo-negocio", "name": "logo-negocio", "public": False},
-                    timeout=15,
-                )
-                if not bucket.ok:
-                    # Un conflicto de creacion concurrente solo es aceptable
-                    # si luego se puede verificar que el bucket existe.
-                    verificacion = requests.get(
-                        f"{url}/storage/v1/bucket/logo-negocio",
-                        headers=headers,
-                        timeout=15,
-                    )
-                    if not verificacion.ok:
-                        st.error(
-                            f"Supabase no pudo crear el almacenamiento del logo "
-                            f"(HTTP {bucket.status_code}): {bucket.text[:600]}"
-                        )
-                        st.stop()
-            elif not consulta.ok:
-                st.error(
-                    f"Supabase no pudo comprobar el almacenamiento del logo "
-                    f"(HTTP {consulta.status_code}): {consulta.text[:600]}"
-                )
-                st.stop()
-            respuesta = requests.post(
-                f"{url}/storage/v1/object/logo-negocio/logo.png",
-                headers={**headers, "Content-Type": "image/png", "x-upsert": "true"},
-                data=logo_png,
-                timeout=25,
-            )
-            if not respuesta.ok:
-                st.error(
-                    f"Supabase no pudo subir el logo "
-                    f"(HTTP {respuesta.status_code}): {respuesta.text[:600]}"
-                )
-                st.stop()
-            st.success("Logo guardado. Aparecera en Consulta de precios (puede tardar hasta un minuto).")
-        except requests.RequestException as exc:
-            st.error(f"No se pudo guardar el logo en Supabase: {exc}")
+
+CSS = """
+<style>
+.stApp { background: #f4f7fc; }
+.block-container {
+    max-width: 100%;
+    padding: .5rem .8rem 1rem;
+}
+#MainMenu, footer { visibility: hidden; }
+header[data-testid="stHeader"] { background: transparent; }
+.main-header {
+    background: linear-gradient(135deg, #0c2e59, #0759c9);
+    border-radius: 20px;
+    padding: clamp(12px, 3vw, 28px);
+    text-align: center;
+    color: white;
+    margin-bottom: 12px;
+}
+.main-header h1 {
+    color: white !important;
