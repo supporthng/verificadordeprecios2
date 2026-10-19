@@ -1,6 +1,11 @@
 """Navegación con inicio de sesión obligatorio, incluso para consultar precios."""
 import time
+import json
+import hmac
+import hashlib
+import base64
 import streamlit as st
+from streamlit_cookies_manager import EncryptedCookieManager
 from auth_usuarios import allowed, bootstrap, cambiar_password, current_user, get_user, verificar
 
 st.set_page_config(
@@ -16,9 +21,60 @@ except Exception as exc:
     st.error("No se pudo inicializar el sistema de usuarios: " + str(exc))
     st.stop()
 
+# Sesión persistente y cifrada en una cookie del navegador.
+# No se guardan contraseñas en el navegador.
+_cookie_secret = str(st.secrets.get("SESSION_COOKIE_KEY", "")).strip()
+if not _cookie_secret:
+    st.error("Falta SESSION_COOKIE_KEY en Streamlit Secrets para activar las sesiones persistentes.")
+    st.stop()
+cookies = EncryptedCookieManager(prefix="consulta_precios_", password=_cookie_secret)
+if not cookies.ready():
+    st.stop()
+
+COOKIE_NAME = "login_v1"
+COOKIE_SECONDS = 60 * 60 * 24 * 30
+
+def _token(usuario):
+    payload = {"id": str(usuario["id"]), "exp": int(time.time()) + COOKIE_SECONDS,
+               "v": hashlib.sha256(usuario["password_hash"].encode()).hexdigest()[:24]}
+    body = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).decode().rstrip("=")
+    sig = hmac.new(_cookie_secret.encode(), body.encode(), hashlib.sha256).hexdigest()
+    return body + "." + sig
+
+def _recover(token):
+    try:
+        body, sig = token.rsplit(".", 1)
+        correct = hmac.new(_cookie_secret.encode(), body.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig, correct):
+            return None
+        payload = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+        if int(payload["exp"]) <= time.time():
+            return None
+        from auth_usuarios import api
+        rows = api("GET", {"id": "eq." + str(payload["id"]), "select": "id,password_hash,active", "limit": 1})
+        if not rows or not rows[0]["active"]:
+            return None
+        version = hashlib.sha256(rows[0]["password_hash"].encode()).hexdigest()[:24]
+        if not hmac.compare_digest(payload["v"], version):
+            return None
+        return rows[0]["id"]
+    except (ValueError, KeyError, TypeError, RuntimeError, OverflowError):
+        return None
+
 st.session_state.setdefault("usuario_id", None)
 st.session_state.setdefault("fallos_login", 0)
 st.session_state.setdefault("bloqueo_hasta", 0.0)
+
+# Recuperar sesión al refrescar la página o reabrir el navegador.
+if not st.session_state.usuario_id:
+    token = cookies.get(COOKIE_NAME)
+    if token:
+        restored_id = _recover(token)
+        if restored_id:
+            st.session_state.usuario_id = restored_id
+        else:
+            del cookies[COOKIE_NAME]
+            cookies.save()
 
 user = current_user()
 if not user:
@@ -81,6 +137,8 @@ if not user:
                     cuenta = None
                 if valido:
                     st.session_state.usuario_id = cuenta["id"]
+                    cookies[COOKIE_NAME] = _token(cuenta)
+                    cookies.save()
                     st.session_state.fallos_login = 0
                     st.rerun()
                 else:
@@ -95,6 +153,9 @@ with st.sidebar:
     st.caption("Sesión: " + user["username"])
     if st.button("Cerrar sesión"):
         st.session_state.usuario_id = None
+        if COOKIE_NAME in cookies:
+            del cookies[COOKIE_NAME]
+            cookies.save()
         st.rerun()
 
 if user and user["must_change_password"]:
@@ -112,6 +173,10 @@ if user and user["must_change_password"]:
         else:
             try:
                 cambiar_password(user, a)
+                # La contraseña cambió: renovar cookie con el nuevo hash.
+                updated = current_user()
+                cookies[COOKIE_NAME] = _token(updated)
+                cookies.save()
                 st.success("Contraseña cambiada.")
                 st.rerun()
             except (ValueError, RuntimeError) as exc:
