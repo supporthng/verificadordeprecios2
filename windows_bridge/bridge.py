@@ -56,6 +56,7 @@ PORTS = [(1433, 'SQL Server'), (50517, 'SQL Server'), (3306, 'MySQL / MariaDB'),
          (5432, 'PostgreSQL'), (3050, 'Firebird'), (1521, 'Oracle'),
          (50000, 'IBM Db2'), (2638, 'SQL Anywhere')]
 app = FastAPI(title='Puente LAN - Consulta de Precios', docs_url=None, redoc_url=None)
+WORKER_LAST_POLL = 0.0
 logger = logging.getLogger('conector_lan')
 logger.setLevel(logging.INFO)
 try:
@@ -111,7 +112,9 @@ def page(body):
 
 @app.get('/health')
 def health():
-    return {'ok': True, 'version': 'asistente-universal-v2'}
+    return {'ok': True, 'version': 'asistente-universal-v3',
+            'worker_age_seconds': (round(time.monotonic() - WORKER_LAST_POLL, 1)
+                                   if WORKER_LAST_POLL else None)}
 
 
 @app.get('/login')
@@ -692,6 +695,7 @@ def _process_external_queue(table, select, execute):
 
 
 def _external_worker():
+    global WORKER_LAST_POLL
     while True:
         for table, fields, handler in (
             ('external_metadata_jobs',
@@ -703,6 +707,7 @@ def _external_worker():
                 _process_external_queue(table, fields, handler)
             except Exception as exc:
                 logger.warning('Fallo al consultar cola %s: %s', table, type(exc).__name__)
+        WORKER_LAST_POLL = time.monotonic()
         time.sleep(3)
 
 

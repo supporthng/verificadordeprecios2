@@ -25,6 +25,7 @@ Source: "..\windows_bridge\dist\ConfigurarConector.exe"; DestDir: "{app}"; Flags
 Source: "bridge.env.example"; DestDir: "{commonappdata}\ConsultaPrecios"; DestName: "bridge.env"; Flags: onlyifdoesntexist
 Source: "RegistrarInicioAutomatico.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "DetenerConector.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "VigilarConector.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "DetenerConector.ps1"; Flags: dontcopy
 [Icons]
 Name: "{group}\Configurar con asistente"; Filename: "{app}\ConfigurarConector.exe"
