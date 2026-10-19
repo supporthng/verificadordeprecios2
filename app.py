@@ -155,6 +155,15 @@ div[data-testid="stTextInput"] input {
     .product-name { margin: 6px 0; }
     .product-code { margin-bottom: 8px; }
 }
+
+.search-card { min-height: 255px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; }
+.search-card .search-label { color: #64748b; font-weight: 800; letter-spacing: 1px; font-size: 14px; }
+.search-card .search-text { color: #102b50; font-weight: 750; font-size: clamp(18px, 3vw, 24px); }
+.search-visual { width: min(300px, 90%); height: 105px; overflow: hidden; }
+.search-lens { animation: scan-barcode 2.1s ease-in-out infinite; transform-origin: center; }
+@keyframes scan-barcode { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(180px); } }
+@media (prefers-reduced-motion: reduce) { .search-lens { animation: none; } }
+.not-found-name { color: #102b50; font-size: clamp(23px, 4.5vw, 40px); font-weight: 850; line-height: 1.2; margin: 16px 0; }
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
@@ -369,27 +378,43 @@ def verificador():
             '</div>',
             unsafe_allow_html=True,
         )
-        if st.session_state.get("lookup_duration") is not None:
-            st.caption(f"Tiempo de consulta: {st.session_state.lookup_duration:.2f} segundos")
-            diag = st.session_state.get("diag", {})
-            if diag.get("polls"):
-                st.caption(
-                    f"Diagnóstico: origen {diag.get('source_seconds', 0):.2f}s · "
-                    f"crear solicitud {diag.get('post_seconds', 0):.2f}s · "
-                    f"lecturas {diag['polls']} ({diag['get_seconds']:.2f}s de red)"
-                )
-                st.caption("Estados: " + " → ".join(
-                    f"{state} a los {elapsed:.2f}s" for state, elapsed in diag.get("statuses", [])
-                ))
 
     elif st.session_state.consult_error:
         st.error(st.session_state.consult_error)
         if st.session_state.get("lookup_duration") is not None:
             st.caption(f"Tiempo transcurrido: {st.session_state.lookup_duration:.2f} segundos")
     elif st.session_state.external_job:
-        st.info("Consultando la base de datos externa desde Windows…")
+        # Solo se muestra una animación amigable; no exponer detalles técnicos.
+        st.markdown(
+            '<div class="product-card search-card">'
+            '<div class="search-label">VERIFICANDO PRECIO</div>'
+            '<svg class="search-visual" viewBox="0 0 300 105" role="img" '
+            'aria-label="Lupa buscando un código de barras">'
+            '<g fill="#64748b">'
+            + ''.join(
+                f'<rect x="{15 + i * 9}" y="22" width="{4 if i % 3 == 0 else 2}" '
+                f'height="{55 if i % 4 == 0 else 45}" />' for i in range(27)
+            )
+            + '</g><g class="search-lens">'
+            '<circle cx="36" cy="42" r="23" fill="#e8f1ff" fill-opacity="0.9" '
+            'stroke="#0759c9" stroke-width="5"/>'
+            '<path d="M53 59 L78 84" stroke="#0759c9" stroke-width="9" '
+            'stroke-linecap="round"/></g></svg>'
+            '<div class="search-text">Buscando producto...</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
     elif st.session_state.not_found:
-        st.warning("Producto no encontrado")
+        barcode = html.escape(str(st.session_state.get("last_searched_barcode", "")))
+        st.markdown(
+            '<div class="product-card">'
+            '<div class="product-label">RESULTADO DE LA CONSULTA</div>'
+            '<div class="not-found-name">PRODUCTO NO ENCONTRADO</div>'
+            f'<div class="product-code">Código: {barcode}</div>'
+            '<div class="price-label">VERIFIQUE EL CÓDIGO DE BARRAS</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
     else:
         st.markdown(
