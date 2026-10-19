@@ -214,6 +214,7 @@ for key, default in (
     ("diag", {}),
     ("consult_error", None),
     ("source_snapshot", None),
+    ("diag_error", ""),
 ):
     if key not in st.session_state:
         st.session_state[key] = default
@@ -227,6 +228,7 @@ def buscar_producto():
     st.session_state.lookup_started = time.monotonic()
     st.session_state.lookup_duration = None
     st.session_state.diag = {"polls": 0, "get_seconds": 0.0, "statuses": []}
+    st.session_state.diag_error = ""
     st.session_state.current_product = None
     st.session_state.not_found = False
     st.session_state.consult_error = None
@@ -258,7 +260,8 @@ def buscar_producto():
                 raise RuntimeError("No se pudo registrar la consulta externa")
             st.session_state.external_job = rows[0]["id"]
             st.session_state.external_started = time.monotonic()
-    except Exception:
+    except Exception as exc:
+        st.session_state.diag_error = f"Envío: {type(exc).__name__}: {str(exc)[:250]}"
         st.session_state.consult_error = (
             "No se pudo consultar la fuente seleccionada. "
             "Revisa la configuración y el conector Windows."
@@ -310,12 +313,14 @@ def check_external_result():
             if st.session_state.get("lookup_started") is not None:
                 st.session_state.lookup_duration = round(st.session_state.result_time - st.session_state.lookup_started, 2)
         elif job["status"] == "error":
+            st.session_state.diag_error = "Conector: " + str(job.get("error_message") or "Sin detalle")[:250]
             st.session_state.external_job = None
             st.session_state.consult_error = (
                 "No se pudo consultar SQL Server. Revisa el conector y la conexión externa."
             )
             st.session_state.result_time = time.monotonic()
-    except (requests.RequestException, RuntimeError):
+    except (requests.RequestException, RuntimeError) as exc:
+        st.session_state.diag_error = f"Respuesta: {type(exc).__name__}: {str(exc)[:250]}"
         st.session_state.external_job = None
         st.session_state.consult_error = "No se pudo obtener la respuesta de la base externa."
         st.session_state.result_time = time.monotonic()
@@ -441,6 +446,19 @@ def verificador():
             label_visibility="collapsed",
         )
 
+    # Diagnóstico temporal: visible durante la búsqueda y cuando llega el resultado.
+    if st.session_state.get("lookup_started") is not None:
+        diag = st.session_state.get("diag", {})
+        elapsed = round(time.monotonic() - st.session_state.lookup_started, 1)
+        with st.expander("Diagnóstico de consulta (temporal)", expanded=True):
+            st.write(f"Código: {st.session_state.get('last_searched_barcode', '')}")
+            st.write(f"Tiempo: {st.session_state.get('lookup_duration') or elapsed} s")
+            st.write(f"Creación de solicitud: {diag.get('post_seconds', 'pendiente')} s")
+            st.write(f"Consultas de estado: {diag.get('polls', 0)}")
+            st.write(f"Estados: {diag.get('statuses', [])}")
+            st.write(f"Solicitud activa: {'sí' if st.session_state.get('external_job') else 'no'}")
+            if st.session_state.get('diag_error'):
+                st.warning(st.session_state.diag_error)
 
 try:
     verificador()
