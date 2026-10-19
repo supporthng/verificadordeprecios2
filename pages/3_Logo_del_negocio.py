@@ -49,22 +49,51 @@ if archivo is not None:
 
     if st.button("Guardar logo", type="primary", use_container_width=True):
         try:
-            # Crear el bucket privado si aun no existe.
-            bucket = requests.post(
-                f"{url}/storage/v1/bucket",
-                headers={**headers, "Content-Type": "application/json"},
-                json={"id": "logo-negocio", "name": "logo-negocio", "public": False},
+            # Consultar primero: Supabase puede devolver 400 si el bucket ya existe.
+            consulta = requests.get(
+                f"{url}/storage/v1/bucket/logo-negocio",
+                headers=headers,
                 timeout=15,
             )
-            if bucket.status_code not in (200, 201, 409):
-                bucket.raise_for_status()
+            if consulta.status_code == 404:
+                bucket = requests.post(
+                    f"{url}/storage/v1/bucket",
+                    headers={**headers, "Content-Type": "application/json"},
+                    json={"id": "logo-negocio", "name": "logo-negocio", "public": False},
+                    timeout=15,
+                )
+                if not bucket.ok:
+                    # Un conflicto de creacion concurrente solo es aceptable
+                    # si luego se puede verificar que el bucket existe.
+                    verificacion = requests.get(
+                        f"{url}/storage/v1/bucket/logo-negocio",
+                        headers=headers,
+                        timeout=15,
+                    )
+                    if not verificacion.ok:
+                        st.error(
+                            f"Supabase no pudo crear el almacenamiento del logo "
+                            f"(HTTP {bucket.status_code}): {bucket.text[:600]}"
+                        )
+                        st.stop()
+            elif not consulta.ok:
+                st.error(
+                    f"Supabase no pudo comprobar el almacenamiento del logo "
+                    f"(HTTP {consulta.status_code}): {consulta.text[:600]}"
+                )
+                st.stop()
             respuesta = requests.post(
                 f"{url}/storage/v1/object/logo-negocio/logo.png",
                 headers={**headers, "Content-Type": "image/png", "x-upsert": "true"},
                 data=logo_png,
                 timeout=25,
             )
-            respuesta.raise_for_status()
+            if not respuesta.ok:
+                st.error(
+                    f"Supabase no pudo subir el logo "
+                    f"(HTTP {respuesta.status_code}): {respuesta.text[:600]}"
+                )
+                st.stop()
             st.success("Logo guardado. Aparecera en Consulta de precios (puede tardar hasta un minuto).")
         except requests.RequestException as exc:
             st.error(f"No se pudo guardar el logo en Supabase: {exc}")
