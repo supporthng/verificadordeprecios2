@@ -582,7 +582,10 @@ def _sql_identifier(value):
 
 
 def _external_connection(host, port, database):
-    import pyodbc
+    try:
+        import pyodbc
+    except ModuleNotFoundError as exc:
+        raise RuntimeError('Falta el modulo pyodbc dentro del conector compilado. Recompila usando requirements.txt y build_windows.ps1 de v4.1.') from exc
     host = str(host)
     port = int(port)
     # _sql_target verifica que el servidor esté en una subred autorizada.

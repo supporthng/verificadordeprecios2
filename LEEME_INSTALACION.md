@@ -1,9 +1,19 @@
-# Conector Windows v4 — diagnóstico SQL y registros
+# Conector Windows v4.1 — correccion de dependencia SQL Server
 
-Paquete de fuentes para GitHub; no contiene EXE compilado.
+## Causa confirmada
+En v4, `bridge.py` linea 585 ejecuta `import pyodbc`, pero `windows_bridge/requirements.txt` no incluye `pyodbc`. El registro muestra `ModuleNotFoundError` en esa linea. Por ello las consultas fallan antes de abrir SQL Server.
 
-Cambios: `/health` muestra versión, ruta y estado del registro, cantidad de trabajos, último trabajo y tipo de último error (sin credenciales). Se registran las etapas de conexión y consulta SQL, así como el traceback de fallos, sin imprimir SQL credentials. Se conservan la configuración, los mecanismos de arranque y el carácter configurable de las bases/tablas/columnas.
+## Cambios
+- Agregado `pyodbc>=5.1,<6` a requirements.txt.
+- Agregado `--hidden-import=pyodbc` al empaquetado PyInstaller.
+- Comprobacion de importacion de pyodbc en la compilacion.
+- Error explicito si el modulo falta.
+- Se mantiene el funcionamiento universal y la configuracion existente; no se fijan bases de datos.
 
-**Instalación:** copiar `.github`, `installer` y `windows_bridge` al repositorio, compilar en GitHub Actions y ejecutar el instalador generado. Después consultar `http://127.0.0.1:8765/health` y confirmar `asistente-universal-v4`. Ante fallo de consulta, mirar `log_path` y `last_error_type`.
+## Instalacion
+1. Copia las carpetas `windows_bridge`, `installer` y `.github` a tu repositorio, reemplazando sus archivos.
+2. Ejecuta el workflow `Construir conector Windows` en GitHub Actions.
+3. Descarga el artefacto y ejecuta el nuevo instalador EXE como administrador.
+4. Consulta un producto desde Streamlit.
 
-**Limitación:** esta versión instrumenta el error para determinar su causa; no garantiza que SQL Server quede corregido sin conocer el error real. No se ha probado en Windows.
+**Nota:** El paquete es codigo fuente, no EXE. La compilacion Windows y la conexion SQL real deben validarse en el equipo. `pyodbc` no sustituye el controlador ODBC de Microsoft: el equipo debe tener el driver ODBC elegido instalado.
