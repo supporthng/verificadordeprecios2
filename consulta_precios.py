@@ -8,6 +8,7 @@ from pathlib import Path
 import pandas as pd
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 
 
 
@@ -111,8 +112,10 @@ header[data-testid="stHeader"] { background: transparent; }
 }
 div[data-testid="stTextInput"] input {
     text-align: center !important;
-    font-size: clamp(18px, 3vw, 28px) !important;
-    min-height: 56px;
+    font-size: clamp(16px, 2vw, 21px) !important;
+    min-height: 44px;
+    height: 44px;
+    padding: 4px 12px;
     border-radius: 14px;
     border: 2px solid #d5e1f1;
     background: white;
@@ -226,6 +229,30 @@ div[data-testid="stTextInput"] input {
     letter-spacing: 1px;
     margin: 22px 0 8px;
 }
+
+/* Codigo de barras decorativo con barrido continuo, sin recursos externos. */
+.animated-barcode-card {
+    width: min(310px, 75vw); margin: 8px auto 20px; padding: 16px 18px 12px;
+    background: #fff; border-radius: 12px; text-align: center;
+    box-shadow: 0 2px 10px rgba(20,50,90,.04);
+}
+.animated-bars {
+    position: relative; height: 105px; overflow: hidden;
+    background: repeating-linear-gradient(90deg,
+        #102b50 0px, #102b50 2px, #fff 2px, #fff 5px,
+        #102b50 5px, #102b50 9px, #fff 9px, #fff 12px,
+        #102b50 12px, #102b50 13px, #fff 13px, #fff 17px,
+        #102b50 17px, #102b50 22px, #fff 22px, #fff 26px);
+}
+.animated-scan-line {
+    position: absolute; top: 0; bottom: 0; left: 0; width: 4px;
+    background: #ff9d20; box-shadow: 0 0 9px 3px rgba(255,157,32,.7);
+    animation: barcode-sweep 2.4s ease-in-out infinite alternate;
+}
+@keyframes barcode-sweep { from { left: 0; } to { left: calc(100% - 4px); } }
+.animated-barcode-caption { color: #102b50; margin-top: 10px; font-size: 16px; }
+@media (prefers-reduced-motion: reduce) { .animated-scan-line { animation: none; left: 50%; } }
+@media (max-width: 600px) { .animated-barcode-card { width: min(260px, 76vw); } }
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
@@ -458,27 +485,31 @@ def verificador():
             unsafe_allow_html=True,
         )
 
-        barcode_image = Path("assets/barcode.png")
-        if barcode_image.is_file():
-            left, center, right = st.columns([2, 1, 2])
-            with center:
-                st.image(str(barcode_image), use_container_width=True)
+        # Codigo de barras animado: solo decorativo, no altera la lectura real.
+        st.markdown("""
+        <div class="animated-barcode-card" aria-label="Escaner de codigos de barras animado">
+          <div class="animated-bars"><div class="animated-scan-line"></div></div>
+          <div class="animated-barcode-caption">PRECIO &nbsp;•&nbsp; RD$</div>
+        </div>
+        """, unsafe_allow_html=True)
 
         st.markdown(
             '<div class="scan-title">ESCANEA TU CÓDIGO AQUÍ</div>',
             unsafe_allow_html=True,
         )
 
-        st.text_input(
-            "Código de barras",
-            key="search_input",
-            on_change=buscar_producto,
-            label_visibility="collapsed",
-        )
+        lado_izquierdo, campo_central, lado_derecho = st.columns([1, 2, 1])
+        with campo_central:
+            st.text_input(
+                "Código de barras",
+                key="search_input",
+                on_change=buscar_producto,
+                label_visibility="collapsed",
+                placeholder="Escanea o escribe el código",
+            )
 
         logo = cargar_logo_negocio()
         if logo:
-            st.markdown('<div class="business-logo-label">NUESTRO NEGOCIO</div>', unsafe_allow_html=True)
             # Logo en la misma columna central y ancho que la imagen del codigo de barras.
             try:
                 with Image.open(BytesIO(logo)) as original:
@@ -494,6 +525,65 @@ def verificador():
             except (OSError, ValueError):
                 pass
 
+
+
+# Captura de lectores USB/Bluetooth que actuan como teclado (HID).
+# Se instala fuera del fragmento para seguir escuchando mientras se muestra el precio.
+def _consulta_lector_global():
+    codigo = str(st.session_state.get("lector_global", "")).strip()
+    if codigo:
+        st.session_state.search_input = codigo
+        buscar_producto()
+
+st.markdown("""
+<style>
+/* El campo auxiliar recibe el codigo sin ocupar espacio en la pantalla. */
+div[data-testid="stTextInput"]:has(input[aria-label="Lector global oculto"]) { display:none !important; }
+</style>
+""", unsafe_allow_html=True)
+st.text_input("Lector global oculto", key="lector_global", on_change=_consulta_lector_global,
+              label_visibility="collapsed")
+
+# El lector transmite los digitos muy rapidamente y finaliza con Enter.
+# Ignorar pulsaciones lentas evita interferir con la navegacion y las contrasenas.
+components.html(r"""
+<script>
+(function () {
+  try {
+    const doc = window.parent.document;
+    if (window.parent.__wilposScannerInstalled) return;
+    window.parent.__wilposScannerInstalled = true;
+    let buffer = '', last = 0;
+    doc.addEventListener('keydown', function(e) {
+      if (e.ctrlKey || e.altKey || e.metaKey || e.isComposing) return;
+      const now = Date.now();
+      if (e.key === 'Enter') {
+        const scanned = buffer;
+        buffer = '';
+        if (scanned.length < 5 || now - last > 250) return;
+        const target = doc.querySelector('input[aria-label="Lector global oculto"]');
+        if (!target) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const setter = Object.getOwnPropertyDescriptor(window.parent.HTMLInputElement.prototype, 'value').set;
+        setter.call(target, scanned);
+        target.dispatchEvent(new window.parent.Event('input', { bubbles: true }));
+        target.dispatchEvent(new window.parent.KeyboardEvent('keydown', {key:'Enter', code:'Enter', bubbles:true}));
+        target.dispatchEvent(new window.parent.KeyboardEvent('keyup', {key:'Enter', code:'Enter', bubbles:true}));
+        return;
+      }
+      if (e.key.length !== 1) { buffer = ''; return; }
+      if (now - last > 120) buffer = '';
+      if (/^[0-9A-Za-z._-]$/.test(e.key)) buffer += e.key;
+      else buffer = '';
+      last = now;
+    }, true);
+  } catch(err) {
+    // Algunos navegadores pueden impedir el acceso al documento padre.
+  }
+})();
+</script>
+""", height=0)
 
 try:
     verificador()
