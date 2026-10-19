@@ -716,7 +716,8 @@ def _execute_catalog(job):
                 f' ORDER BY {code} OFFSET ? ROWS FETCH NEXT ? ROWS ONLY')
     with _external_connection(cfg['host'], cfg['port'], cfg['database']) as cn:
         cur = cn.cursor()
-        cur.timeout = 20
+        # pyodbc.Cursor no admite asignar timeout en esta versión.
+        # El tiempo de conexión ya está configurado en _external_connection.
         cur.execute(sql_count, *args)
         total = int(cur.fetchone()[0])
         cur.execute(sql_rows, *(args + [(page - 1) * size, size]))
