@@ -23,13 +23,13 @@ if not user:
                 radial-gradient(ellipse at 98% 0%, #e9f1ff 0%, transparent 40%), #f7faff; }
       [data-testid="stSidebar"], [data-testid="collapsedControl"] { display: none !important; }
       .block-container { max-width: 1100px; padding-top: clamp(35px, 9vh, 115px); }
-      .login-head { text-align:center; padding: 20px 10px 15px; }
+      .login-head { text-align:center; padding: 20px 10px 15px; width:100%; margin:0 auto; }
       .login-icon { display:inline-flex; align-items:center; justify-content:center;
           width:70px; height:70px; border-radius:20px; background:#eaf1ff;
           font-size:36px; margin-bottom:14px; }
-      .login-title { font-weight:800; font-size:clamp(17px, 2.2vw, 25px); color:#172f56;
+      .login-title { font-weight:800; font-size:clamp(18px, 3.1vw, 40px); color:#172f56;
           margin:0 0 8px; line-height:1.2; white-space:nowrap; letter-spacing:-.5px; }
-      .login-subtitle { color:#71809a; font-size:15px; margin:0 0 8px; }
+      .login-subtitle { color:#71809a; font-size:15px; margin:10px 0 8px; }
       [data-testid="stForm"] { background:white; border:1px solid #e3eaf6;
           border-radius:22px; padding:22px 28px 30px;
           box-shadow:0 16px 45px rgba(27, 57, 112, .11); }
@@ -45,19 +45,20 @@ if not user:
           .block-container { padding:24px 12px 20px; }
           [data-testid="stForm"] { padding:16px 18px 22px; }
           .login-icon { width:60px; height:60px; font-size:30px; }
-          .login-title { font-size:clamp(13px, 3.6vw, 20px); letter-spacing:-.6px; }
+          .login-title { font-size:clamp(13px, 3.4vw, 20px); letter-spacing:-.6px; }
       }
     </style>
     """, unsafe_allow_html=True)
-    _, centro, _ = st.columns([1, 1.25, 1], gap="small")
+    # Encabezado a todo el ancho para centrar el título sin saltos de línea.
+    st.markdown("""
+    <div class="login-head">
+      <div class="login-icon">🔐</div>
+      <h1 class="login-title">Sistema de Consulta de Precios</h1>
+      <p class="login-subtitle">Inicia sesión para acceder al sistema</p>
+    </div>
+    """, unsafe_allow_html=True)
+    _, centro, _ = st.columns([1, 1.05, 1], gap="small")
     with centro:
-        st.markdown("""
-        <div class="login-head">
-          <div class="login-icon">🔐</div>
-          <h1 class="login-title">Sistema de Consulta de Precios</h1>
-          <p class="login-subtitle">Inicia sesión para acceder al sistema</p>
-        </div>
-        """, unsafe_allow_html=True)
         with st.form("inicio_sesion"):
             nombre = st.text_input("👤 Usuario", placeholder="Ingresa tu usuario")
             clave = st.text_input("🔒 Contraseña", type="password", placeholder="Ingresa tu contraseña")
