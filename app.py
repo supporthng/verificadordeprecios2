@@ -3,7 +3,12 @@ import time
 import streamlit as st
 from auth_usuarios import allowed, bootstrap, cambiar_password, current_user, get_user, verificar
 
-st.set_page_config(page_title="Consulta de Precios", page_icon="🏷️", layout="wide")
+st.set_page_config(
+    page_title="Consulta de Precios",
+    page_icon="🏷️",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
 try:
     bootstrap()
