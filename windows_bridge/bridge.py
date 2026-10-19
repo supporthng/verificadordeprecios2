@@ -639,6 +639,7 @@ def _execute_metadata(job):
 
 
 def _execute_price(job):
+    price_started = time.monotonic()
     rows = supabase('GET', 'external_price_sources', params={
         'id': 'eq.' + str(job['configuration_id']),
         'enabled': 'eq.true',
@@ -648,6 +649,7 @@ def _execute_price(job):
     if not rows:
         raise ValueError('Configuración externa inexistente o deshabilitada')
     config = rows[0]
+    logger.info('Precio: configuración leída en %.3f s', time.monotonic() - price_started)
     if config['engine'] != 'SQL Server':
         raise ValueError('Este conector actualmente ejecuta consultas de productos solo en SQL Server')
     schema = _sql_identifier(config.get('schema_name') or 'dbo')
@@ -662,15 +664,19 @@ def _execute_price(job):
     sql = (f'SELECT TOP (1) {code}, {description}, {price} '
            f'FROM {schema}.{table} WHERE {code} = ?')
     logger.info('Consulta SQL: preparando conexión (sin mostrar credenciales)')
+    connect_started = time.monotonic()
     with _external_connection(config['host'], config['port'], config['database']) as cn:
-        logger.info('Consulta SQL: conexión establecida')
+        logger.info('Consulta SQL: conexión establecida en %.3f s', time.monotonic() - connect_started)
         cur = cn.cursor()
         # pyodbc.Connection no garantiza un atributo timeout asignable.
         # El tiempo de conexión se configura en _external_connection.
         logger.info('Consulta SQL: ejecutando SELECT parametrizado')
+        select_started = time.monotonic()
         cur.execute(sql, barcode)
         row = cur.fetchone()
-        logger.info('Consulta SQL: SELECT finalizado; encontrado=%s', row is not None)
+        logger.info('Consulta SQL: SELECT finalizado en %.3f s; encontrado=%s; total=%.3f s',
+                    time.monotonic() - select_started, row is not None,
+                    time.monotonic() - price_started)
         if row is None:
             return None
         if row[2] is None:
@@ -776,31 +782,42 @@ def _process_external_queue(table, select, execute):
                 logger.exception('No se pudo publicar el error de la solicitud')
 
 
-def _external_worker():
+def _price_worker():
+    """Prioridad a precios; no esperar consultas de metadatos o catálogos."""
     global WORKER_LAST_POLL
+    while True:
+        try:
+            _process_external_queue('external_price_jobs',
+                                    'id,configuration_id,barcode', _execute_price)
+        except Exception as exc:
+            logger.error('Fallo al consultar cola external_price_jobs: %s\n%s',
+                         type(exc).__name__, ''.join(traceback.format_tb(exc.__traceback__)))
+        WORKER_LAST_POLL = time.monotonic()
+        time.sleep(1)
+
+
+def _external_worker():
+    """Conservar las otras colas sin bloquear la consulta de precios."""
     while True:
         for table, fields, handler in (
             ('external_metadata_jobs',
              'id,kind,host,port,database,schema_name,table_name', _execute_metadata),
-            ('external_price_jobs',
-             'id,configuration_id,barcode', _execute_price),
             ('external_catalog_jobs',
              'id,configuration_id,page_number,page_size,search_term', _execute_catalog),
         ):
             try:
                 _process_external_queue(table, fields, handler)
             except Exception as exc:
-                logger.error('Fallo al consultar cola %s: %s\n%s', table, type(exc).__name__, ''.join(traceback.format_tb(exc.__traceback__)))
-        WORKER_LAST_POLL = time.monotonic()
+                logger.error('Fallo al consultar cola %s: %s\n%s',
+                             table, type(exc).__name__, ''.join(traceback.format_tb(exc.__traceback__)))
         time.sleep(3)
 
 
 @app.on_event('startup')
 def _start_external_worker():
-    threading.Thread(target=_external_worker, name='external-jobs',
-                     daemon=True).start()
-    logger.info('Procesador de metadatos y precios externos iniciado')
-
+    threading.Thread(target=_price_worker, name='price-jobs', daemon=True).start()
+    threading.Thread(target=_external_worker, name='external-jobs', daemon=True).start()
+    logger.info('Procesadores de precios y catálogos externos iniciados')
 
 
 
