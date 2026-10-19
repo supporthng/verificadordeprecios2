@@ -14,7 +14,7 @@ INSTALACIÓN (antes de activar usuarios)
 5. En la página del logo, elimina la validación anterior LOGO_ADMIN_PASSWORD
    una vez activada la nueva protección con require("logo").
 6. Publica cambios. En el menú lateral, inicia sesión con admin / admin.
-   Se exige cambiar la contraseña inmediatamente por una de >= 10 caracteres.
+   Se exige cambiar la contraseña inmediatamente por una de >= 8 caracteres.
 7. Conserva SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY en Streamlit Secrets.
    Nunca publiques SERVICE_ROLE_KEY en GitHub.
 NOTAS: El bloqueo por intentos es por sesión de navegador, no global.

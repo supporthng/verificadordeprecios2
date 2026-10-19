@@ -131,7 +131,7 @@ def require(permission):
     return u
 
 def cambiar_password(user, nueva):
-    if len(nueva) < 10:
-        raise ValueError("La nueva contraseña debe tener al menos 10 caracteres.")
+    if len(nueva) < 8:
+        raise ValueError("La nueva contraseña debe tener al menos 8 caracteres.")
     api("PATCH", {"id": "eq." + str(user["id"])},
         {"password_hash": hash_password(nueva), "must_change_password": False})

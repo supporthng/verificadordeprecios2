@@ -7,7 +7,7 @@ st.title("👥 Administrador de Usuarios")
 with st.expander("Cambiar mi contraseña"):
     with st.form("mi_password"):
         actual = st.text_input("Contraseña actual", type="password")
-        nueva = st.text_input("Nueva contraseña (mínimo 10 caracteres)", type="password")
+        nueva = st.text_input("Nueva contraseña (mínimo 8 caracteres)", type="password")
         confirmar = st.text_input("Confirmar nueva contraseña", type="password")
         ok = st.form_submit_button("Guardar mi contraseña")
     if ok:
@@ -38,8 +38,8 @@ if submit:
     username = username.strip().lower()
     if not username or not all(c.isalnum() or c in "._-" for c in username):
         st.error("Nombre de usuario inválido.")
-    elif len(password) < 10:
-        st.error("La contraseña temporal debe tener al menos 10 caracteres.")
+    elif len(password) < 8:
+        st.error("La contraseña temporal debe tener al menos 8 caracteres.")
     else:
         try:
             if get_user(username):
@@ -68,14 +68,14 @@ for u in users:
                 default=[p for p in u["permissions"] or [] if p in PERMISOS],
                 format_func=lambda p: PERMISOS[p], key="perms_"+str(u["id"]))
             active = st.checkbox("Cuenta activa", value=u["active"], key="activo_"+str(u["id"]))
-            reset = st.text_input("Nueva contraseña temporal (opcional, mínimo 10 caracteres)",
+            reset = st.text_input("Nueva contraseña temporal (opcional, mínimo 8 caracteres)",
                 type="password", key="reset_"+str(u["id"]))
             save = st.form_submit_button("Guardar cambios")
         if save:
             if u["id"] == admin["id"] and (not active or role != "admin"):
                 st.error("No puedes quitarte tu propio acceso de administrador.")
-            elif reset and len(reset) < 10:
-                st.error("La contraseña temporal debe tener al menos 10 caracteres.")
+            elif reset and len(reset) < 8:
+                st.error("La contraseña temporal debe tener al menos 8 caracteres.")
             else:
                 changes = {"role": role, "permissions": perms, "active": active}
                 if reset:
