@@ -192,4 +192,23 @@ habilitadas = [st.Page(path, title=title, icon=icon)
                 for perm, path, title, icon in config if allowed(user, perm)]
 if habilitadas:
     pages["Configuración"] = habilitadas
+# Menú visible también cuando la barra lateral comienza cerrada.
+# Solo ofrece páginas para las que el usuario tiene permiso.
+with st.popover("☰ Menú / Mi cuenta"):
+    st.caption("Sesión: " + user["username"])
+    st.markdown("**Principal**")
+    if st.button("🏷️ Consulta de Precios", key="menu_consulta", use_container_width=True):
+        st.switch_page(pages["Principal"][0])
+    if habilitadas:
+        st.markdown("**Configuración**")
+        for i, pagina in enumerate(habilitadas):
+            titulo = [item[2] for item in config if allowed(user, item[0])][i]
+            if st.button(titulo, key=f"menu_config_{i}", use_container_width=True):
+                st.switch_page(pagina)
+    st.divider()
+    if st.button("🚪 Cerrar sesión", key="menu_cerrar_sesion", use_container_width=True):
+        st.session_state.usuario_id = None
+        cookies.remove(COOKIE_NAME)
+        st.rerun()
+
 st.navigation(pages, position="sidebar").run()
