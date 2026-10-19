@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import threading
 import time
+import traceback
 from pathlib import Path
 from urllib.parse import quote, urlencode
 
@@ -644,7 +645,8 @@ def _execute_price(job):
            f'FROM {schema}.{table} WHERE {code} = ?')
     with _external_connection(config['host'], config['port'], config['database']) as cn:
         cur = cn.cursor()
-        cn.timeout = 12
+        # pyodbc.Connection no garantiza un atributo timeout asignable.
+        # El tiempo de conexión se configura en _external_connection.
         cur.execute(sql, barcode)
         row = cur.fetchone()
         if row is None:
@@ -676,7 +678,11 @@ def _process_external_queue(table, select, execute):
                 'id': 'eq.' + jid, 'status': 'eq.processing',
             }, json={'status': 'done', 'result': result, 'error_message': None})
         except Exception as exc:
-            logger.warning('Error al ejecutar solicitud %s: %s', table, type(exc).__name__)
+            # Registrar la ubicación exacta del fallo sin volcar mensajes de
+            # excepciones ODBC, que podrían contener datos de conexión.
+            logger.error('Error al ejecutar solicitud %s: %s\n%s',
+                         table, type(exc).__name__,
+                         ''.join(traceback.format_tb(exc.__traceback__)))
             try:
                 supabase('PATCH', table, params={
                     'id': 'eq.' + jid, 'status': 'eq.processing',
