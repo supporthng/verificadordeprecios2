@@ -52,6 +52,27 @@ def active_source():
     return mode, sources[0]["id"]
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def cargar_logo_negocio():
+    """Lee el logo persistente desde Supabase Storage, sin hacerlo publico."""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        return None
+    try:
+        response = requests.get(
+            f"{SUPABASE_URL}/storage/v1/object/logo-negocio/logo.png",
+            headers={
+                "apikey": SUPABASE_SERVICE_ROLE_KEY,
+                "Authorization": "Bearer " + SUPABASE_SERVICE_ROLE_KEY,
+            },
+            timeout=8,
+        )
+        if response.status_code == 200 and response.headers.get("content-type", "").startswith("image/"):
+            return response.content
+    except requests.RequestException:
+        pass
+    return None
+
+
 CSS = """
 <style>
 .stApp { background: #f4f7fc; }
@@ -196,6 +217,13 @@ div[data-testid="stTextInput"] input {
 @keyframes scan-barcode { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(180px); } }
 @media (prefers-reduced-motion: reduce) { .search-lens { animation: none; } }
 .not-found-name { color: #102b50; font-size: clamp(23px, 4.5vw, 40px); font-weight: 850; line-height: 1.2; margin: 16px 0; }
+.business-logo-label {
+    text-align: center;
+    color: #64748b;
+    font-weight: 750;
+    letter-spacing: 1px;
+    margin: 22px 0 8px;
+}
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
@@ -445,6 +473,13 @@ def verificador():
             on_change=buscar_producto,
             label_visibility="collapsed",
         )
+
+        logo = cargar_logo_negocio()
+        if logo:
+            st.markdown('<div class="business-logo-label">NUESTRO NEGOCIO</div>', unsafe_allow_html=True)
+            _, centro, _ = st.columns([1, 3, 1])
+            with centro:
+                st.image(logo, use_container_width=True)
 
 
 try:
