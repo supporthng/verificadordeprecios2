@@ -4,6 +4,13 @@ La sincronización se configura y ejecuta en el servidor local.
 import streamlit as st
 
 st.set_page_config(page_title='Fuentes de datos',page_icon='🗄️',layout='centered')
+# La sesión principal controla el acceso; no pedir otra contraseña.
+from auth_usuarios import current_user, allowed
+_usuario_modulo = current_user()
+if not _usuario_modulo or not allowed(_usuario_modulo, "fuentes"):
+    st.error("No tienes permiso para acceder a esta sección.")
+    st.stop()
+
 st.title('Fuentes de datos')
 st.info('La consulta de precios actual continúa utilizando Supabase. Esta pantalla documenta las opciones de integración; no cambia conexiones por sí sola.')
 

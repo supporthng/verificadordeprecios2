@@ -12,16 +12,11 @@ st.write("Sube el logo que aparecera debajo del lector de codigo en Consulta de 
 
 url = str(st.secrets.get("SUPABASE_URL", "")).strip().rstrip("/")
 key = str(st.secrets.get("SUPABASE_SERVICE_ROLE_KEY", "")).strip()
-admin_password = str(st.secrets.get("LOGO_ADMIN_PASSWORD", ""))
-
-if not admin_password:
-    st.error("Configura LOGO_ADMIN_PASSWORD en los Secrets de Streamlit para proteger esta pagina.")
-    st.stop()
-
-password = st.text_input("Contraseña de administrador", type="password")
-if not hmac.compare_digest(password, admin_password):
-    if password:
-        st.error("Contraseña incorrecta.")
+# La sesión principal controla el acceso; no pedir otra contraseña.
+from auth_usuarios import current_user, allowed
+_usuario_modulo = current_user()
+if not _usuario_modulo or not allowed(_usuario_modulo, "logo"):
+    st.error("No tienes permiso para acceder a esta sección.")
     st.stop()
 
 if not url or not key:

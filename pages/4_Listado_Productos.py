@@ -7,20 +7,11 @@ import streamlit as st
 
 st.title("📋 Consulta de Base de Datos")
 st.caption("Listado de productos de la fuente seleccionada. No modifica precios ni configuraciones.")
-password = str(st.secrets.get("ADMIN_PASSWORD", ""))
-if not password:
-    st.error("Falta ADMIN_PASSWORD en Secrets.")
-    st.stop()
-if not st.session_state.get("catalog_admin_ok"):
-    with st.form("catalog_login"):
-        typed = st.text_input("Contraseña de administración", type="password")
-        submit = st.form_submit_button("Entrar")
-    if submit:
-        if hmac.compare_digest(typed, password):
-            st.session_state.catalog_admin_ok = True
-            st.rerun()
-        else:
-            st.error("Contraseña incorrecta")
+# La sesión principal controla el acceso; no pedir otra contraseña.
+from auth_usuarios import current_user, allowed
+_usuario_modulo = current_user()
+if not _usuario_modulo or not allowed(_usuario_modulo, "consultar_base"):
+    st.error("No tienes permiso para acceder a esta sección.")
     st.stop()
 
 url = str(st.secrets.get("SUPABASE_URL", "")).strip().rstrip("/")

@@ -54,44 +54,12 @@ div[data-testid="stMetric"] {
 st.title("🔒 Administración de precios")
 st.caption("Inventario, publicación e historial de cambios")
 
-admin_password = secret("ADMIN_PASSWORD")
-
-if not admin_password:
-    st.error("ADMIN_PASSWORD no está configurada.")
+# La sesión principal controla el acceso; no pedir otra contraseña.
+from auth_usuarios import current_user, allowed
+_usuario_modulo = current_user()
+if not _usuario_modulo or not allowed(_usuario_modulo, "cargar_archivo"):
+    st.error("No tienes permiso para acceder a esta sección.")
     st.stop()
-
-if not st.session_state.get("admin_authenticated", False):
-
-    with st.form("admin_login"):
-        password = st.text_input(
-            "Contraseña de administrador",
-            type="password",
-        )
-        submit = st.form_submit_button("Ingresar")
-
-    if submit:
-        if hmac.compare_digest(
-            password.encode(),
-            admin_password.encode(),
-        ):
-            st.session_state.admin_authenticated = True
-            st.rerun()
-        else:
-            st.error("Contraseña incorrecta")
-
-    st.stop()
-
-
-top_left, top_right = st.columns([5, 1])
-
-with top_left:
-    st.success("Acceso administrativo")
-
-with top_right:
-    if st.button("Cerrar sesión"):
-        st.session_state.admin_authenticated = False
-        st.rerun()
-
 
 # ==========================================
 # CONEXION ADMINISTRATIVA

@@ -12,18 +12,11 @@ import streamlit as st
 st.title('⚙️ Configuración de bases de datos externas')
 st.caption('Detecta servidores, bases, tablas y columnas. La consulta de precios se realiza en el verificador principal.')
 
-admin_password = str(st.secrets.get('ADMIN_PASSWORD', ''))
-if not admin_password:
-    st.error('Falta ADMIN_PASSWORD en Secrets.'); st.stop()
-if not st.session_state.get('external_admin_ok'):
-    with st.form('external_login'):
-        pwd = st.text_input('Contraseña de administración', type='password')
-        ok = st.form_submit_button('Entrar')
-    if ok:
-        if secrets.compare_digest(pwd, admin_password):
-            st.session_state.external_admin_ok = True
-            st.rerun()
-        else: st.error('Contraseña incorrecta')
+# La sesión principal controla el acceso; no pedir otra contraseña.
+from auth_usuarios import current_user, allowed
+_usuario_modulo = current_user()
+if not _usuario_modulo or not allowed(_usuario_modulo, "configurar"):
+    st.error("No tienes permiso para acceder a esta sección.")
     st.stop()
 
 url = str(st.secrets.get('SUPABASE_URL', '')).rstrip('/')
