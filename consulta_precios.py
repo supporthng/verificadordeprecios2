@@ -3,10 +3,45 @@ from io import BytesIO
 from PIL import Image, ImageOps
 from datetime import datetime, timedelta, timezone
 import time
+import inspect
 
 import pandas as pd
 import requests
 import streamlit as st
+
+# El enfoque se aplica directamente al textbox nativo de Streamlit.
+# No utiliza declare_component ni iframe: evita el RuntimeError anterior.
+FOCO_JS = r"""
+<script>
+(() => {
+  const SELECTOR = 'div[data-testid="stTextInput"] input';
+  function enfocar() {
+    const input = document.querySelector(SELECTOR);
+    if (!input || input.disabled || input.readOnly) return;
+    // No interrumpir al usuario si está escribiendo en otro control.
+    const activo = document.activeElement;
+    if (activo && activo !== document.body && activo !== input &&
+        (activo.matches('input,textarea,select,[contenteditable="true"]'))) return;
+    if (activo !== input) {
+      try { input.focus({preventScroll:true}); } catch (_) { input.focus(); }
+    }
+  }
+  // Instalar solo una vez, incluso cuando Streamlit actualiza el fragmento.
+  if (!window.__consultaPreciosFocoInstalado) {
+    window.__consultaPreciosFocoInstalado = true;
+    new MutationObserver(() => requestAnimationFrame(enfocar))
+      .observe(document.body, {childList:true, subtree:true});
+    window.addEventListener('focus', enfocar);
+    window.addEventListener('pageshow', enfocar);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) setTimeout(enfocar, 100);
+    });
+    setInterval(enfocar, 650);
+  }
+  requestAnimationFrame(() => setTimeout(enfocar, 120));
+})();
+</script>
+"""
 
 SUPABASE_URL = str(st.secrets.get("SUPABASE_URL", "")).strip().rstrip("/")
 SUPABASE_ANON_KEY = str(st.secrets.get("SUPABASE_ANON_KEY", "")).strip()
@@ -502,6 +537,17 @@ def verificador():
                 on_change=buscar_producto,
                 label_visibility="collapsed",
                 placeholder="Escanea o escribe el código",
+            )
+
+        # st.html ejecuta JS en la página (no dentro de un iframe) en versiones
+        # de Streamlit que admiten unsafe_allow_javascript.
+        if "unsafe_allow_javascript" in inspect.signature(st.html).parameters:
+            st.html(FOCO_JS, unsafe_allow_javascript=True)
+        else:
+            st.warning(
+                "El cursor automático requiere una versión reciente de Streamlit "
+                "que admita st.html(unsafe_allow_javascript=True). "
+                "Actualiza Streamlit en requirements.txt."
             )
 
         logo = cargar_logo_negocio()
