@@ -220,6 +220,32 @@ if user["username"].strip().lower() == "consulta" and (solicitar_salida or st.se
             _cerrar_sesion()
         else:
             st.error("Usuario o contraseña del administrador incorrectos. No se ha cerrado la sesión.")
+    # Si nadie escribe el usuario administrador durante 10 segundos,
+    # activar el mismo boton Cancelar: conserva intacta la sesion de consulta.
+    # No se altera la autenticacion ni se crea una segunda navegacion.
+    st.html(r"""
+    <script>
+    (() => {
+      const doc = window.parent.document;
+      const input = doc.querySelector('input[aria-label="Usuario administrador"]');
+      if (!input) return;
+      const cancelar = () => {
+        const botones = [...doc.querySelectorAll('button')];
+        return botones.find(b => b.textContent.includes('Cancelar y volver a Consulta de Precios'));
+      };
+      // Un solo temporizador por instancia del formulario; evita reiniciarlo
+      // en cada actualizacion de Streamlit.
+      if (window.__temporizadorSalidaAdminInput === input) return;
+      window.__temporizadorSalidaAdminInput = input;
+      setTimeout(() => {
+        if (!input.isConnected) return;
+        if (input.value.trim() !== '') return;
+        const boton = cancelar();
+        if (boton && !boton.disabled) boton.click();
+      }, 10000);
+    })();
+    </script>
+    """, unsafe_allow_javascript=True)
     if st.button("Cancelar y volver a Consulta de Precios", key="cancelar_salida_consulta"):
         if "salir" in st.query_params:
             del st.query_params["salir"]
