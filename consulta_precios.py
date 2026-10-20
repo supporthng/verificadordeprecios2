@@ -527,44 +527,42 @@ def verificador():
 
 
 
-# Mantener el foco en el campo visible para lectores que actuan como teclado.
-# No se usa un campo invisible ni captura global de teclas.
+# Foco persistente en el campo visible, incluso tras rerenderizados de Streamlit.
+# El menu y otros campos interactivos pueden recibir el foco al pulsarlos.
 components.html(r"""
 <script>
 (function () {
   try {
-    const doc = window.parent.document;
-    const selector = 'input[aria-label="Código de barras"]';
-    if (window.parent.__precioFocusCleanup) window.parent.__precioFocusCleanup();
-    let pending;
-    const isInteractive = el => !!(el && el.closest('button, a, [role="button"], [role="menu"], [role="dialog"], [data-testid="stSidebar"], input:not([aria-label="Código de barras"]), textarea, select'));
-    function focusInput() {
+    const win = window.parent;
+    const doc = win.document;
+    if (win.__precioFocusCleanup) win.__precioFocusCleanup();
+    let timer = null;
+    const selector = 'input[aria-label="Código de barras"], input[placeholder="Escanea o escribe el código"]';
+    const otherControl = el => !!(el && el.closest('button, a, [role="button"], [role="menu"], [role="dialog"], [data-testid="stSidebar"], textarea, select, input:not([placeholder="Escanea o escribe el código"])'));
+    function restore() {
       const input = doc.querySelector(selector);
       if (!input || input.disabled || doc.hidden) return;
       const active = doc.activeElement;
-      // No interrumpir botones, menú de navegación, ni cerrar sesión.
-      if (active && active !== doc.body && active !== input && isInteractive(active)) return;
-      if (active !== input) input.focus({preventScroll: true});
+      if (active === input || otherControl(active)) return;
+      try { input.focus({preventScroll:true}); } catch (_) { input.focus(); }
     }
-    function schedule() { clearTimeout(pending); pending = setTimeout(focusInput, 90); }
-    function onClick(event) {
-      if (!isInteractive(event.target)) schedule();
-    }
-    function onKey(event) {
-      // Si se escanea con el campo enfocado, Streamlit recibe Enter por on_change.
-      if (event.key === 'Enter' && doc.activeElement?.matches(selector)) schedule();
-    }
+    function schedule() { clearTimeout(timer); timer = setTimeout(restore, 80); }
+    function onClick(ev) { if (!otherControl(ev.target)) schedule(); }
+    function onKey(ev) { if (ev.key === 'Enter') setTimeout(restore, 180); }
     doc.addEventListener('click', onClick, true);
     doc.addEventListener('keydown', onKey, true);
     const observer = new MutationObserver(schedule);
     observer.observe(doc.body, {childList:true, subtree:true});
-    window.parent.__precioFocusCleanup = () => {
-      clearTimeout(pending); observer.disconnect();
+    const interval = setInterval(restore, 450);
+    win.__precioFocusCleanup = () => {
+      clearTimeout(timer); clearInterval(interval); observer.disconnect();
       doc.removeEventListener('click', onClick, true);
       doc.removeEventListener('keydown', onKey, true);
     };
-    schedule();
-  } catch (e) { /* El navegador puede restringir acceso al marco principal. */ }
+    restore();
+    setTimeout(restore, 350);
+    setTimeout(restore, 1200);
+  } catch (e) { /* Algunos navegadores restringen el acceso al marco principal. */ }
 })();
 </script>
 """, height=0)
