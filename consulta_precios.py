@@ -498,24 +498,6 @@ def verificador():
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown(
-            '<div class="scan-title">ESCANEA TU CÓDIGO AQUÍ</div>',
-            unsafe_allow_html=True,
-        )
-
-        lado_izquierdo, campo_central, lado_derecho = st.columns([1, 2, 1])
-        with campo_central:
-            lectura = scanner_component(key="lector_codigo_autofoco", default=None)
-            if isinstance(lectura, dict):
-                identificador = str(lectura.get("id", ""))
-                codigo = str(lectura.get("codigo", "")).strip()
-                if codigo and identificador and identificador != st.session_state.get("ultimo_scan_componente"):
-                    st.session_state.ultimo_scan_componente = identificador
-                    st.session_state.search_input = codigo
-                    buscar_producto()
-                    st.rerun(scope="fragment")
-
-
         logo = cargar_logo_negocio()
         if logo:
             # Logo en la misma columna central y ancho que la imagen del codigo de barras.
@@ -535,6 +517,21 @@ def verificador():
 
 
 
+
+# El campo del lector se monta FUERA del fragmento de actualización.
+# Así permanece visible y estable mientras se busca y se muestra el precio.
+st.markdown('<div class="scan-title">ESCANEA TU CÓDIGO AQUÍ</div>', unsafe_allow_html=True)
+_, columna_lector, _ = st.columns([1, 2, 1])
+with columna_lector:
+    lectura = scanner_component(key="lector_codigo_autofoco", default=None)
+
+if isinstance(lectura, dict):
+    identificador = str(lectura.get("id", ""))
+    codigo = str(lectura.get("codigo", "")).strip()
+    if codigo and identificador and identificador != st.session_state.get("ultimo_scan_componente"):
+        st.session_state.ultimo_scan_componente = identificador
+        st.session_state.search_input = codigo
+        buscar_producto()
 
 try:
     verificador()
