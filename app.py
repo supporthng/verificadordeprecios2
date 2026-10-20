@@ -185,8 +185,6 @@ if user and user["must_change_password"]:
 pages = {"Principal": [
     st.Page("consulta_precios.py", title="Consulta de Precios", icon="🏷️", default=True)
 ]}
-if user.get("role") == "admin":
-    pages["Principal"].append(st.Page("pages/6_Prueba_del_Cursor.py", title="Prueba del Cursor", icon="🧪"))
 config = [
     ("cargar_archivo", "pages/1_Administracion.py", "Cargar Archivo Local", "📁"),
     ("consultar_base", "pages/4_Listado_Productos.py", "Consulta de Base de Datos", "📋"),
@@ -204,9 +202,6 @@ with st.expander("☰ Menú / Mi cuenta", expanded=False):
     st.caption("Sesión: " + user["username"])
     if st.button("🏷️ Consulta de Precios", key="menu_consulta", use_container_width=True):
         st.switch_page(pages["Principal"][0])
-    if user.get("role") == "admin":
-        if st.button("🧪 Prueba del Cursor", key="menu_prueba_cursor", use_container_width=True):
-            st.switch_page(pages["Principal"][1])
     if habilitadas:
         st.markdown("**Configuración**")
         for i, pagina in enumerate(habilitadas):
