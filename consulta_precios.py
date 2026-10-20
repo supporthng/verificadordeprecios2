@@ -366,6 +366,68 @@ div[data-testid="stTextInput"] {
 </style>
 """
 
+# Diseño de pantalla de espera para 2connect: solo presentación.
+# El input nativo oculto, su foco y el escaneo no se modifican.
+CSS += """
+<style>
+/* Mantener todo centrado, con proporciones de terminal compacto. */
+.stApp { background: #f4f8ff !important; }
+.main-header {
+  background: linear-gradient(110deg,#0b315f,#0757d4) !important;
+  border-radius: 16px !important;
+  padding: clamp(12px,2.4vh,22px) 55px !important;
+  margin-bottom: clamp(12px,3vh,26px) !important;
+  box-shadow: 0 6px 16px rgba(8,60,130,.09);
+}
+.main-header h1 { font-size: clamp(21px,3.6vw,37px) !important; }
+.main-header p { font-size: clamp(11px,1.4vw,16px) !important; margin-top: 6px !important; }
+.animated-barcode-card {
+  width: min(420px,72vw) !important;
+  max-width: 100% !important;
+  padding: clamp(10px,2vh,20px) clamp(16px,2vw,24px) 10px !important;
+  margin: 0 auto clamp(10px,2.5vh,22px) !important;
+  border-radius: 17px !important;
+  box-shadow: 0 7px 22px rgba(17,54,98,.09) !important;
+}
+.animated-bars { height: clamp(65px,17vh,128px) !important; }
+.animated-barcode-caption { margin-top: 8px !important; font-size: clamp(12px,1.6vw,16px) !important; }
+.scan-title { font-size: clamp(21px,3.2vw,32px) !important; margin: 0 !important; }
+.scan-hint {
+  color: #7c8ca6; text-align: center; font-weight: 500;
+  font-size: clamp(13px,1.8vw,19px);
+  margin: 2px auto 0;
+}
+[data-testid="stImage"] { text-align:center !important; }
+[data-testid="stImage"] img { object-fit:contain !important; width:auto !important; margin:auto !important; }
+@media (min-width:600px) and (max-height:720px) {
+  [data-testid="stMainBlockContainer"], .block-container { padding-top: 0.2rem !important; padding-bottom: 0.2rem !important; }
+  [data-testid="stVerticalBlock"] { gap: 0.25rem !important; }
+  .main-header { padding: 10px 50px !important; margin-bottom: clamp(6px,2vh,12px) !important; border-radius: 12px !important; }
+  .main-header h1 { font-size: clamp(20px,4vh,28px) !important; }
+  .main-header p { margin-top: 2px !important; font-size: 11px !important; }
+  .animated-barcode-card { width: min(350px,65vw) !important; padding: 10px 15px 6px !important; margin: 0 auto 7px !important; }
+  .animated-bars { height: clamp(55px,15vh,92px) !important; }
+  .animated-barcode-caption { margin-top: 3px !important; font-size: 12px !important; }
+  .scan-title { font-size: clamp(18px,3.6vh,25px) !important; margin: 0 !important; }
+  .scan-hint { font-size: clamp(12px,2.5vh,15px) !important; margin: 0 !important; }
+  [data-testid="stImage"] img { max-height: clamp(45px,12vh,75px) !important; }
+}
+@media (min-width:600px) and (max-height:480px) {
+  .main-header { padding: 7px 45px !important; margin-bottom: 5px !important; }
+  .animated-barcode-card { padding: 6px 12px 4px !important; margin-bottom: 3px !important; }
+  .animated-bars { height: 48px !important; }
+  .scan-title { font-size: 18px !important; }
+  [data-testid="stImage"] img { max-height: 48px !important; }
+}
+@media (max-width:599px) {
+  .main-header { padding: 14px 38px !important; }
+  .main-header h1 { font-size: clamp(17px,4.7vw,24px) !important; }
+  .animated-barcode-card { width: min(330px,80vw) !important; }
+  .scan-title { font-size: clamp(18px,5vw,24px) !important; }
+}
+</style>
+"""
+
 st.markdown(CSS, unsafe_allow_html=True)
 
 
@@ -605,7 +667,8 @@ def verificador():
         """, unsafe_allow_html=True)
 
         st.markdown(
-            '<div class="scan-title">ESCANEA TU CÓDIGO AQUÍ</div>',
+            '<div class="scan-title">ESCANEA TU CÓDIGO AQUÍ</div>'
+            '<div class="scan-hint">El precio se mostrará automáticamente</div>',
             unsafe_allow_html=True,
         )
 
