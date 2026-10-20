@@ -1,221 +1,588 @@
-"""Navegación con inicio de sesión obligatorio, incluso para consultar precios."""
+import html
+from io import BytesIO
+from PIL import Image, ImageOps
+from datetime import datetime, timedelta, timezone
 import time
-import json
-import hmac
-import hashlib
-import base64
-import streamlit as st
-from streamlit_cookies_controller import CookieController
-from auth_usuarios import allowed, bootstrap, cambiar_password, current_user, get_user, verificar
+import inspect
 
-st.set_page_config(
-    page_title="Consulta de Precios",
-    page_icon="🏷️",
-    layout="wide",
-    initial_sidebar_state="collapsed",
-)
+import pandas as pd
+import requests
+import streamlit as st
+
+# El enfoque se aplica directamente al textbox nativo de Streamlit.
+# No utiliza declare_component ni iframe: evita el RuntimeError anterior.
+FOCO_JS = r"""
+<script>
+(() => {
+  const SELECTOR = 'div[data-testid="stTextInput"] input';
+  function enfocar() {
+    const input = document.querySelector(SELECTOR);
+    if (!input || input.disabled || input.readOnly) return;
+    // No interrumpir al usuario si está escribiendo en otro control.
+    const activo = document.activeElement;
+    if (activo && activo !== document.body && activo !== input &&
+        (activo.matches('input,textarea,select,[contenteditable="true"]'))) return;
+    if (activo !== input) {
+      try { input.focus({preventScroll:true}); } catch (_) { input.focus(); }
+    }
+  }
+  // Instalar solo una vez, incluso cuando Streamlit actualiza el fragmento.
+  if (!window.__consultaPreciosFocoInstalado) {
+    window.__consultaPreciosFocoInstalado = true;
+    new MutationObserver(() => requestAnimationFrame(enfocar))
+      .observe(document.body, {childList:true, subtree:true});
+    window.addEventListener('focus', enfocar);
+    window.addEventListener('pageshow', enfocar);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) setTimeout(enfocar, 100);
+    });
+    setInterval(enfocar, 650);
+  }
+  requestAnimationFrame(() => setTimeout(enfocar, 120));
+})();
+</script>
+"""
+
+SUPABASE_URL = str(st.secrets.get("SUPABASE_URL", "")).strip().rstrip("/")
+SUPABASE_ANON_KEY = str(st.secrets.get("SUPABASE_ANON_KEY", "")).strip()
+
+SUPABASE_SERVICE_ROLE_KEY = str(st.secrets.get("SUPABASE_SERVICE_ROLE_KEY", "")).strip()
+
+def admin_api(method, table, params=None, payload=None):
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        raise RuntimeError("Falta SUPABASE_SERVICE_ROLE_KEY en Secrets.")
+    headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": "Bearer " + SUPABASE_SERVICE_ROLE_KEY,
+        "Content-Type": "application/json",
+        "Prefer": "return=representation",
+    }
+    response = requests.request(
+        method, f"{SUPABASE_URL}/rest/v1/{table}",
+        params=params, json=payload, headers=headers, timeout=12,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+@st.cache_data(ttl=4, show_spinner=False)
+def active_source():
+    settings = admin_api("GET", "price_source_settings",
+                         params={"id": "eq.1", "select": "source_type"})
+    if not settings:
+        raise RuntimeError("Falta configurar el origen de datos.")
+    mode = settings[0]["source_type"]
+    if mode == "local":
+        return mode, None
+    if mode != "external":
+        raise RuntimeError("Origen de datos desconocido.")
+    sources = admin_api("GET", "external_price_sources",
+                        params={"enabled": "eq.true", "select": "id,name", "limit": "2"})
+    if len(sources) != 1:
+        raise RuntimeError(
+            "La fuente externa requiere exactamente una configuración habilitada. "
+            "Configúrala en Fuentes de datos."
+        )
+    return mode, sources[0]["id"]
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def cargar_logo_negocio():
+    """Lee el logo persistente desde Supabase Storage, sin hacerlo publico."""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        return None
+    try:
+        response = requests.get(
+            f"{SUPABASE_URL}/storage/v1/object/logo-negocio/logo.png",
+            headers={
+                "apikey": SUPABASE_SERVICE_ROLE_KEY,
+                "Authorization": "Bearer " + SUPABASE_SERVICE_ROLE_KEY,
+            },
+            timeout=8,
+        )
+        if response.status_code == 200 and response.headers.get("content-type", "").startswith("image/"):
+            return response.content
+    except requests.RequestException:
+        pass
+    return None
+
+
+CSS = """
+<style>
+.stApp { background: #f4f7fc; }
+.block-container {
+    max-width: 100%;
+    padding: .5rem .8rem 1rem;
+}
+#MainMenu, footer { visibility: hidden; }
+header[data-testid="stHeader"] { background: transparent; }
+.main-header {
+    background: linear-gradient(135deg, #0c2e59, #0759c9);
+    border-radius: 20px;
+    padding: clamp(12px, 3vw, 28px);
+    text-align: center;
+    color: white;
+    margin-bottom: 12px;
+}
+.main-header h1 {
+    color: white !important;
+    font-size: clamp(20px, 4vw, 38px);
+    margin: 0;
+}
+.main-header p {
+    color: #dceaff;
+    font-size: clamp(12px, 2vw, 17px);
+    margin: 6px 0 0;
+}
+.scan-title {
+    color: #102b50;
+    text-align: center;
+    font-weight: 850;
+    font-size: clamp(18px, 3.5vw, 32px);
+    margin: 10px 0;
+}
+div[data-testid="stTextInput"] input {
+    text-align: center !important;
+    font-size: clamp(16px, 2vw, 21px) !important;
+    min-height: 44px;
+    height: 44px;
+    padding: 4px 12px;
+    border-radius: 14px;
+    border: 2px solid #d5e1f1;
+    background: white;
+}
+.product-card {
+    background: white;
+    border: 1px solid #dce5f2;
+    border-radius: 20px;
+    padding: clamp(16px, 4vw, 36px);
+    text-align: center;
+    margin: 10px auto;
+    box-shadow: 0 7px 25px rgba(20,50,90,.07);
+}
+/* Resultado ampliado para pantallas de verificadores de precios. */
+.product-card.result-card {
+    width: 100%;
+    min-height: 76dvh;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(8px, 1.5vh, 18px);
+    padding: clamp(16px, 3vw, 40px);
+    margin: 0 auto;
+}
+.result-card .product-name {
+    font-size: clamp(28px, 5.5vw, 66px);
+    margin: 2px 0;
+}
+.result-card .product-code {
+    font-size: clamp(17px, 2.5vw, 26px);
+    margin: 0;
+}
+.result-card .product-price {
+    font-size: clamp(54px, 10vw, 126px);
+    margin: 0;
+}
+.result-card .product-label, .result-card .price-label {
+    font-size: clamp(15px, 2vw, 23px);
+}
+@media (max-width: 600px) {
+    .product-card.result-card { min-height: 72dvh; }
+    .result-card .product-price { font-size: clamp(42px, 11vw, 78px); }
+}
+@media (orientation: landscape) and (max-height: 650px) {
+    .product-card.result-card { min-height: 79dvh; padding: 10px 22px; gap: 6px; }
+    .result-card .product-name { font-size: clamp(28px, 5vw, 58px); }
+    .result-card .product-price { font-size: clamp(55px, 9vw, 110px); }
+}
+.product-label, .price-label {
+    color: #64748b;
+    font-weight: 800;
+    letter-spacing: 1px;
+    font-size: clamp(12px, 2vw, 17px);
+}
+.product-name {
+    color: #102b50;
+    font-size: clamp(22px, 4.5vw, 40px);
+    font-weight: 850;
+    overflow-wrap: anywhere;
+    line-height: 1.2;
+    margin: 12px 0;
+}
+.product-code {
+    color: #64748b;
+    font-size: clamp(14px, 2vw, 21px);
+    overflow-wrap: anywhere;
+    margin-bottom: 22px;
+}
+.product-price {
+    color: #0757c3;
+    font-size: clamp(40px, 8vw, 76px);
+    font-weight: 900;
+    line-height: 1.1;
+    overflow-wrap: anywhere;
+    margin-top: 8px;
+}
+@media (max-width: 600px) {
+    .block-container { padding: .6rem .6rem 1rem; }
+    .main-header { padding: 13px 10px; margin-bottom: 8px; }
+    .main-header h1 { font-size: clamp(19px, 5.5vw, 27px); }
+    .scan-title { margin: 6px 0; font-size: clamp(17px, 5vw, 24px); }
+    div[data-testid="stTextInput"] input { min-height: 48px; }
+    .product-card { padding: 18px 12px; }
+}
+@media (orientation: landscape) and (max-height: 650px) {
+    .block-container { padding-top: .25rem; padding-bottom: .4rem; }
+    .main-header { padding: 8px 12px; margin-bottom: 5px; }
+    .main-header h1 { font-size: clamp(18px, 3vw, 27px); }
+    .main-header p { margin-top: 2px; font-size: 12px; }
+    .scan-title { margin: 4px 0; font-size: clamp(17px, 3vw, 24px); }
+    div[data-testid="stTextInput"] input { min-height: 44px; }
+    .product-card { padding: 12px; margin: 4px auto; }
+    .product-name { margin: 6px 0; }
+    .product-code { margin-bottom: 8px; }
+}
+
+.search-card { min-height: 255px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; }
+.search-card .search-label { color: #64748b; font-weight: 800; letter-spacing: 1px; font-size: 14px; }
+.search-card .search-text { color: #102b50; font-weight: 750; font-size: clamp(18px, 3vw, 24px); }
+.search-visual { width: min(300px, 90%); height: 105px; overflow: hidden; }
+.search-lens { animation: scan-barcode 2.1s ease-in-out infinite; transform-origin: center; }
+@keyframes scan-barcode { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(180px); } }
+@media (prefers-reduced-motion: reduce) { .search-lens { animation: none; } }
+.not-found-name { color: #102b50; font-size: clamp(23px, 4.5vw, 40px); font-weight: 850; line-height: 1.2; margin: 16px 0; }
+.business-logo-label {
+    text-align: center;
+    color: #64748b;
+    font-weight: 750;
+    letter-spacing: 1px;
+    margin: 22px 0 8px;
+}
+
+/* Codigo de barras decorativo con barrido continuo, sin recursos externos. */
+.animated-barcode-card {
+    width: min(310px, 75vw); margin: 8px auto 20px; padding: 16px 18px 12px;
+    background: #fff; border-radius: 12px; text-align: center;
+    box-shadow: 0 2px 10px rgba(20,50,90,.04);
+}
+.animated-bars {
+    position: relative; height: 105px; overflow: hidden;
+    background: repeating-linear-gradient(90deg,
+        #102b50 0px, #102b50 2px, #fff 2px, #fff 5px,
+        #102b50 5px, #102b50 9px, #fff 9px, #fff 12px,
+        #102b50 12px, #102b50 13px, #fff 13px, #fff 17px,
+        #102b50 17px, #102b50 22px, #fff 22px, #fff 26px);
+}
+.animated-scan-line {
+    position: absolute; top: 0; bottom: 0; left: 0; width: 4px;
+    background: #ff9d20; box-shadow: 0 0 9px 3px rgba(255,157,32,.7);
+    animation: barcode-sweep 2.4s ease-in-out infinite alternate;
+}
+@keyframes barcode-sweep { from { left: 0; } to { left: calc(100% - 4px); } }
+.animated-barcode-caption { color: #102b50; margin-top: 10px; font-size: 16px; }
+@media (prefers-reduced-motion: reduce) { .animated-scan-line { animation: none; left: 50%; } }
+@media (max-width: 600px) { .animated-barcode-card { width: min(260px, 76vw); } }
+</style>
+"""
+# Color verde del campo de la antigua Prueba del Cursor.
+# Solo modifica la apariencia; no cambia el mecanismo de enfoque.
+CSS += """
+<style>
+div[data-testid="stTextInput"] input:focus,
+div[data-testid="stTextInput"] input:focus-visible {
+    outline: none !important;
+    border-color: #16823c !important;
+    box-shadow: 0 0 0 3px #d9f5df !important;
+}
+</style>
+"""
+st.markdown(CSS, unsafe_allow_html=True)
+
+
+@st.cache_data(ttl=90, show_spinner=False)
+def catalog():
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        raise ValueError("Falta configurar Supabase en Streamlit Secrets.")
+
+    headers = {
+        "apikey": SUPABASE_ANON_KEY,
+        "Authorization": f"Bearer {SUPABASE_ANON_KEY}",
+    }
+    rows = []
+    page_size = 500
+    offset = 0
+
+    while True:
+        response = requests.get(
+            f"{SUPABASE_URL}/rest/v1/products",
+            params={
+                "select": "barcode,name,price",
+                "order": "barcode.asc",
+                "limit": page_size,
+                "offset": offset,
+            },
+            headers=headers,
+            timeout=25,
+        )
+        response.raise_for_status()
+        batch = response.json()
+        if not isinstance(batch, list):
+            raise ValueError("Respuesta inesperada de Supabase.")
+        rows.extend(batch)
+        if len(batch) < page_size:
+            break
+        offset += page_size
+
+    return pd.DataFrame(rows, columns=["barcode", "name", "price"])
+
+
+for key, default in (
+    ("search_input", ""),
+    ("last_searched_barcode", ""),
+    ("current_product", None),
+    ("result_time", None),
+    ("not_found", False),
+    ("external_job", None),
+    ("external_started", None),
+    ("consult_error", None),
+    ("source_snapshot", None),
+):
+    if key not in st.session_state:
+        st.session_state[key] = default
+
+
+def buscar_producto():
+    query = str(st.session_state.get("search_input", "")).strip()
+    if not query:
+        return
+    st.session_state.last_searched_barcode = query
+    st.session_state.current_product = None
+    st.session_state.not_found = False
+    st.session_state.consult_error = None
+    st.session_state.external_job = None
+    st.session_state.result_time = None
+    try:
+        mode, source_id = active_source()
+        if mode == "local":
+            df = catalog()
+            hits = df[df["barcode"].astype(str).str.strip() == query].head(1)
+            if hits.empty:
+                st.session_state.not_found = True
+            else:
+                st.session_state.current_product = hits.iloc[0].to_dict()
+            st.session_state.result_time = time.monotonic()
+        else:
+            rows = admin_api("POST", "external_price_jobs", payload={
+                "configuration_id": source_id,
+                "barcode": query,
+                "status": "pending",
+                "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=2)).isoformat(),
+            })
+            if not rows or not rows[0].get("id"):
+                raise RuntimeError("No se pudo registrar la consulta externa")
+            st.session_state.external_job = rows[0]["id"]
+            st.session_state.external_started = time.monotonic()
+    except Exception as exc:
+        st.session_state.consult_error = (
+            "No se pudo consultar la fuente seleccionada. "
+            "Revisa la configuración y el conector Windows."
+        )
+        st.session_state.result_time = time.monotonic()
+
+
+def check_external_result():
+    jid = st.session_state.external_job
+    if not jid:
+        return
+    if time.monotonic() - st.session_state.external_started > 25:
+        st.session_state.external_job = None
+        st.session_state.consult_error = (
+            "La base externa no respondió a tiempo. No se consultó la base local."
+        )
+        st.session_state.result_time = time.monotonic()
+        return
+    try:
+        rows = admin_api("GET", "external_price_jobs",
+                         params={"id": "eq." + jid, "select": "status,result,error_message"})
+        if not rows:
+            raise RuntimeError("La solicitud externa no existe.")
+        job = rows[0]
+        if job["status"] == "done":
+            result = job.get("result")
+            if result:
+                st.session_state.current_product = {
+                    "barcode": result.get("barcode") or st.session_state.get("last_searched_barcode", ""),
+                    "name": result.get("name", ""),
+                    "price": result.get("price", 0),
+                }
+            else:
+                st.session_state.not_found = True
+            st.session_state.external_job = None
+            st.session_state.result_time = time.monotonic()
+        elif job["status"] == "error":
+            st.session_state.external_job = None
+            st.session_state.consult_error = (
+                "No se pudo consultar SQL Server. Revisa el conector y la conexión externa."
+            )
+            st.session_state.result_time = time.monotonic()
+    except (requests.RequestException, RuntimeError) as exc:
+        st.session_state.external_job = None
+        st.session_state.consult_error = "No se pudo obtener la respuesta de la base externa."
+        st.session_state.result_time = time.monotonic()
+
+
+@st.fragment(run_every=0.25)
+def verificador():
+    # Evitar mostrar resultados de una fuente distinta si el administrador la cambia.
+    try:
+        mode, source_id = active_source()
+        snapshot = (mode, source_id)
+        if st.session_state.source_snapshot != snapshot:
+            st.session_state.source_snapshot = snapshot
+            st.session_state.current_product = None
+            st.session_state.not_found = False
+            st.session_state.external_job = None
+            st.session_state.result_time = None
+            st.session_state.consult_error = None
+            st.session_state.last_searched_barcode = ""
+    except Exception:
+        st.error("No se pudo leer la fuente activa. Revisa Configuración.")
+        return
+
+    if mode == "external":
+        check_external_result()
+    started = st.session_state.result_time
+
+    # Los códigos inexistentes vuelven antes al lector; los productos encontrados
+    # conservan el tiempo habitual para leer el precio.
+    display_seconds = 3 if st.session_state.not_found else 10
+    if started is not None and time.monotonic() - started >= display_seconds:
+        st.session_state.current_product = None
+        st.session_state.not_found = False
+        st.session_state.consult_error = None
+        st.session_state.result_time = None
+        # El widget puede no existir cuando se muestra un resultado.
+        # Streamlit limpia automaticamente su estado al ocultarlo.
+
+    product = st.session_state.current_product
+
+    if product is not None:
+        name = html.escape(str(product["name"]))
+        barcode = html.escape(str(product["barcode"]))
+        price = float(product["price"])
+
+        st.markdown(
+            '<div class="product-card result-card">'
+            '<div class="product-label">PRODUCTO</div>'
+            f'<div class="product-name">{name}</div>'
+            f'<div class="product-code">Código: {barcode}</div>'
+            '<div class="price-label">PRECIO DE VENTA</div>'
+            f'<div class="product-price">RD$ {price:,.2f}</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+    elif st.session_state.consult_error:
+        st.error(st.session_state.consult_error)
+    elif st.session_state.external_job:
+        # Solo se muestra una animación amigable; no exponer detalles técnicos.
+        st.markdown(
+            '<div class="product-card search-card">'
+            '<div class="search-label">VERIFICANDO PRECIO</div>'
+            '<svg class="search-visual" viewBox="0 0 300 105" role="img" '
+            'aria-label="Lupa buscando un código de barras">'
+            '<g fill="#64748b">'
+            + ''.join(
+                f'<rect x="{15 + i * 9}" y="22" width="{4 if i % 3 == 0 else 2}" '
+                f'height="{55 if i % 4 == 0 else 45}" />' for i in range(27)
+            )
+            + '</g><g class="search-lens">'
+            '<circle cx="36" cy="42" r="23" fill="#e8f1ff" fill-opacity="0.9" '
+            'stroke="#0759c9" stroke-width="5"/>'
+            '<path d="M53 59 L78 84" stroke="#0759c9" stroke-width="9" '
+            'stroke-linecap="round"/></g></svg>'
+            '<div class="search-text">Buscando producto...</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+    elif st.session_state.not_found:
+        barcode = html.escape(str(st.session_state.get("last_searched_barcode", "")))
+        st.markdown(
+            '<div class="product-card">'
+            '<div class="product-label">RESULTADO DE LA CONSULTA</div>'
+            '<div class="not-found-name">PRODUCTO NO ENCONTRADO</div>'
+            f'<div class="product-code">Código: {barcode}</div>'
+            '<div class="price-label">VERIFIQUE EL CÓDIGO DE BARRAS</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+    else:
+        st.markdown(
+            '<div class="main-header">'
+            '<h1>🏷️ CONSULTA DE PRECIOS</h1>'
+            '<p>Consulta rápida de productos y precios</p>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+        # Codigo de barras animado: solo decorativo, no altera la lectura real.
+        st.markdown("""
+        <div class="animated-barcode-card" aria-label="Escaner de codigos de barras animado">
+          <div class="animated-bars"><div class="animated-scan-line"></div></div>
+          <div class="animated-barcode-caption">PRECIO &nbsp;•&nbsp; RD$</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown(
+            '<div class="scan-title">ESCANEA TU CÓDIGO AQUÍ</div>',
+            unsafe_allow_html=True,
+        )
+
+        lado_izquierdo, campo_central, lado_derecho = st.columns([1, 2, 1])
+        with campo_central:
+            st.text_input(
+                "Código de barras",
+                key="search_input",
+                on_change=buscar_producto,
+                label_visibility="collapsed",
+                placeholder="Escanea o escribe el código",
+            )
+
+        # st.html ejecuta JS en la página (no dentro de un iframe) en versiones
+        # de Streamlit que admiten unsafe_allow_javascript.
+        if "unsafe_allow_javascript" in inspect.signature(st.html).parameters:
+            st.html(FOCO_JS, unsafe_allow_javascript=True)
+        else:
+            st.warning(
+                "El cursor automático requiere una versión reciente de Streamlit "
+                "que admita st.html(unsafe_allow_javascript=True). "
+                "Actualiza Streamlit en requirements.txt."
+            )
+
+        logo = cargar_logo_negocio()
+        if logo:
+            # Logo en la misma columna central y ancho que la imagen del codigo de barras.
+            try:
+                with Image.open(BytesIO(logo)) as original:
+                    imagen = ImageOps.contain(original.convert("RGBA"), (180, 120))
+                    lienzo = Image.new("RGBA", (180, 120), (255, 255, 255, 0))
+                    lienzo.alpha_composite(
+                        imagen,
+                        ((180 - imagen.width) // 2, (120 - imagen.height) // 2),
+                    )
+                    izquierda, centro, derecha = st.columns([2, 1, 2])
+                    with centro:
+                        st.image(lienzo, use_container_width=True)
+            except (OSError, ValueError):
+                pass
+
+
+
 
 try:
-    bootstrap()
-except Exception as exc:
-    st.error("No se pudo inicializar el sistema de usuarios: " + str(exc))
-    st.stop()
-
-# Sesión persistente y cifrada en una cookie del navegador.
-# No se guardan contraseñas en el navegador.
-_cookie_secret = str(st.secrets.get("SESSION_COOKIE_KEY", "")).strip()
-if not _cookie_secret:
-    st.error("Falta SESSION_COOKIE_KEY en Streamlit Secrets para activar las sesiones persistentes.")
-    st.stop()
-cookies = CookieController()
-
-COOKIE_NAME = "consulta_precios_login_v2"
-COOKIE_SECONDS = 60 * 60 * 24 * 30
-
-def _token(usuario):
-    payload = {"id": str(usuario["id"]), "exp": int(time.time()) + COOKIE_SECONDS,
-               "v": hashlib.sha256(usuario["password_hash"].encode()).hexdigest()[:24]}
-    body = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).decode().rstrip("=")
-    sig = hmac.new(_cookie_secret.encode(), body.encode(), hashlib.sha256).hexdigest()
-    return body + "." + sig
-
-def _recover(token):
-    try:
-        body, sig = token.rsplit(".", 1)
-        correct = hmac.new(_cookie_secret.encode(), body.encode(), hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(sig, correct):
-            return None
-        payload = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
-        if int(payload["exp"]) <= time.time():
-            return None
-        from auth_usuarios import api
-        rows = api("GET", {"id": "eq." + str(payload["id"]), "select": "id,password_hash,active", "limit": 1})
-        if not rows or not rows[0]["active"]:
-            return None
-        version = hashlib.sha256(rows[0]["password_hash"].encode()).hexdigest()[:24]
-        if not hmac.compare_digest(payload["v"], version):
-            return None
-        return rows[0]["id"]
-    except (ValueError, KeyError, TypeError, RuntimeError, OverflowError):
-        return None
-
-st.session_state.setdefault("usuario_id", None)
-st.session_state.setdefault("fallos_login", 0)
-st.session_state.setdefault("bloqueo_hasta", 0.0)
-
-# Recuperar sesión al refrescar la página o reabrir el navegador.
-if not st.session_state.usuario_id:
-    token = cookies.get(COOKIE_NAME)
-    if token:
-        restored_id = _recover(token)
-        if restored_id:
-            st.session_state.usuario_id = restored_id
-        else:
-            cookies.remove(COOKIE_NAME)
-
-user = current_user()
-if not user:
-    st.markdown("""
-    <style>
-      .stApp { background: radial-gradient(ellipse at 4% 92%, #dce8ff 0%, transparent 46%),
-                radial-gradient(ellipse at 98% 0%, #e9f1ff 0%, transparent 40%), #f7faff; }
-      [data-testid="stSidebar"], [data-testid="collapsedControl"] { display: none !important; }
-      .block-container { max-width: 1100px; padding-top: clamp(35px, 9vh, 115px); }
-      .login-head { text-align:center; padding: 20px 10px 15px; width:100%; margin:0 auto; }
-      .login-icon { display:inline-flex; align-items:center; justify-content:center;
-          width:70px; height:70px; border-radius:20px; background:#eaf1ff;
-          font-size:36px; margin-bottom:14px; }
-      .login-title { font-weight:800; font-size:clamp(18px, 3.1vw, 40px); color:#172f56;
-          margin:0 0 8px; line-height:1.2; white-space:nowrap; letter-spacing:-.5px; }
-      .login-subtitle { color:#71809a; font-size:15px; margin:10px 0 8px; }
-      [data-testid="stForm"] { background:white; border:1px solid #e3eaf6;
-          border-radius:22px; padding:22px 28px 30px;
-          box-shadow:0 16px 45px rgba(27, 57, 112, .11); }
-      [data-testid="stForm"] [data-testid="stTextInput"] input {
-          background:#f9fbff; border-radius:11px; min-height:46px; }
-      [data-testid="stForm"] button[kind="secondaryFormSubmit"] {
-          background:linear-gradient(105deg,#1679ee,#265cf1); color:white;
-          border:0; border-radius:11px; min-height:48px; font-weight:700;
-          box-shadow:0 5px 15px rgba(24,102,232,.20); }
-      [data-testid="stForm"] button[kind="secondaryFormSubmit"]:hover {
-          color:white; background:#165cda; }
-      @media (max-width:600px) {
-          .block-container { padding:24px 12px 20px; }
-          [data-testid="stForm"] { padding:16px 18px 22px; }
-          .login-icon { width:60px; height:60px; font-size:30px; }
-          .login-title { font-size:clamp(13px, 3.4vw, 20px); letter-spacing:-.6px; }
-      }
-    </style>
-    """, unsafe_allow_html=True)
-    # Encabezado a todo el ancho para centrar el título sin saltos de línea.
-    st.markdown("""
-    <div class="login-head">
-      <div class="login-icon">🔐</div>
-      <h1 class="login-title">Sistema de Consulta de Precios</h1>
-      <p class="login-subtitle">Inicia sesión para acceder al sistema</p>
-    </div>
-    """, unsafe_allow_html=True)
-    _, centro, _ = st.columns([1, 1.05, 1], gap="small")
-    with centro:
-        with st.form("inicio_sesion"):
-            nombre = st.text_input("👤 Usuario", placeholder="Ingresa tu usuario")
-            clave = st.text_input("🔒 Contraseña", type="password", placeholder="Ingresa tu contraseña")
-            entrar = st.form_submit_button("➜  Iniciar sesión", use_container_width=True)
-        if entrar:
-            if time.monotonic() < st.session_state.bloqueo_hasta:
-                st.error("Demasiados intentos. Espera 5 minutos.")
-            else:
-                try:
-                    cuenta = get_user(nombre)
-                    valido = bool(cuenta and cuenta["active"] and verificar(clave, cuenta["password_hash"]))
-                except RuntimeError as exc:
-                    st.error(str(exc))
-                    valido = False
-                    cuenta = None
-                if valido:
-                    st.session_state.usuario_id = cuenta["id"]
-                    cookies.set(COOKIE_NAME, _token(cuenta), max_age=COOKIE_SECONDS)
-                    st.session_state.fallos_login = 0
-                    st.rerun()
-                else:
-                    st.session_state.fallos_login += 1
-                    if st.session_state.fallos_login >= 5:
-                        st.session_state.bloqueo_hasta = time.monotonic() + 300
-                        st.session_state.fallos_login = 0
-                    st.error("Usuario o contraseña incorrectos.")
-    st.stop()
-
-def _cerrar_sesion():
-    st.session_state.usuario_id = None
-    try:
-        cookies.remove(COOKIE_NAME)
-    except Exception:
-        pass
-    st.rerun()
-
-# La cuenta exclusiva de consulta no necesita navegación lateral.
-es_solo_consulta = user["username"].strip().lower() == "consulta"
-if not es_solo_consulta:
-    with st.sidebar:
-        st.caption("Sesión: " + user["username"])
-        if st.button("🚪 Cerrar sesión", key="sidebar_logout"):
-            _cerrar_sesion()
-
-if user and user["must_change_password"]:
-    st.title("Cambio obligatorio de contraseña")
-    st.warning("Debes cambiar la contraseña inicial antes de entrar a Configuración.")
-    with st.form("cambio_inicial"):
-        a = st.text_input("Nueva contraseña", type="password")
-        b = st.text_input("Repetir contraseña", type="password")
-        guardar = st.form_submit_button("Cambiar contraseña")
-    if guardar:
-        if a != b:
-            st.error("Las contraseñas no coinciden.")
-        elif a == "admin":
-            st.error("Debes elegir una contraseña diferente de admin.")
-        else:
-            try:
-                cambiar_password(user, a)
-                # La contraseña cambió: renovar cookie con el nuevo hash.
-                updated = current_user()
-                cookies.set(COOKIE_NAME, _token(updated), max_age=COOKIE_SECONDS)
-                st.success("Contraseña cambiada.")
-                st.rerun()
-            except (ValueError, RuntimeError) as exc:
-                st.error(str(exc))
-    st.stop()
-
-pages = {"Principal": [
-    st.Page("consulta_precios.py", title="Consulta de Precios", icon="🏷️", default=True)
-]}
-config = [
-    ("cargar_archivo", "pages/1_Administracion.py", "Cargar Archivo Local", "📁"),
-    ("consultar_base", "pages/4_Listado_Productos.py", "Consulta de Base de Datos", "📋"),
-    ("fuentes", "pages/2_Fuentes_de_datos.py", "Fuentes de Datos", "🔌"),
-    ("configurar", "pages/3_Consulta_Bases_de_Datos.py", "Configurar Consulta", "⚙️"),
-    ("logo", "pages/3_Logo_del_negocio.py", "Logo del Negocio", "🖼️"),
-    ("usuarios", "pages/5_Administrador_Usuarios.py", "Administrador de Usuarios", "👥"),
-]
-habilitadas = [st.Page(path, title=title, icon=icon)
-                for perm, path, title, icon in config if allowed(user, perm)]
-if habilitadas:
-    pages["Configuración"] = habilitadas
-if es_solo_consulta:
-    # Ocultar la barra por completo, incluso si el navegador recuerda que estaba abierta.
-    # No se modifica el lector ni el script de enfoque de consulta_precios.py.
-    st.markdown("""
-    <style>
-      [data-testid="stSidebar"],
-      [data-testid="collapsedControl"],
-      [data-testid="stSidebarCollapsedControl"],
-      [data-testid="stSidebarCollapseButton"] { display: none !important; }
-      [data-testid="stAppViewContainer"] { margin-left: 0 !important; }
-    </style>
-    """, unsafe_allow_html=True)
-    _, zona_salir = st.columns([12, 1.5])
-    with zona_salir:
-        if st.button("🚪 Salir", key="consulta_logout", help="Cerrar sesión"):
-            _cerrar_sesion()
-    st.navigation(pages, position="hidden").run()
-else:
-    st.navigation(pages, position="sidebar").run()
+    verificador()
+except Exception:
+    st.error("No se pudo iniciar la consulta de precios. Revisa la conexión y la fuente seleccionada.")
