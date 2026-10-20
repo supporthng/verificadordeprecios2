@@ -11,8 +11,11 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 # Campo del lector controlado dentro de su propio componente (sin acceder al DOM de Streamlit).
-scanner_component = components.declare_component(
-    "lector_codigo_autofoco", path=str(Path(__file__).resolve().parent / "scanner_component")
+SCANNER_DIR = Path(__file__).resolve().parent / "scanner_component"
+SCANNER_DISPONIBLE = SCANNER_DIR.is_dir() and (SCANNER_DIR / "index.html").is_file()
+scanner_component = (
+    components.declare_component("lector_codigo_autofoco", path=str(SCANNER_DIR))
+    if SCANNER_DISPONIBLE else None
 )
 
 
@@ -505,15 +508,23 @@ def verificador():
 
         lado_izquierdo, campo_central, lado_derecho = st.columns([1, 2, 1])
         with campo_central:
-            lectura = scanner_component(key="lector_codigo_autofoco", default=None)
-            if isinstance(lectura, dict):
-                identificador = str(lectura.get("id", ""))
-                codigo = str(lectura.get("codigo", "")).strip()
-                if codigo and identificador and identificador != st.session_state.get("ultimo_scan_componente"):
-                    st.session_state.ultimo_scan_componente = identificador
-                    st.session_state.search_input = codigo
-                    buscar_producto()
-                    st.rerun(scope="fragment")
+            if scanner_component is not None:
+                lectura = scanner_component(key="lector_codigo_autofoco", default=None)
+                if isinstance(lectura, dict):
+                    identificador = str(lectura.get("id", ""))
+                    codigo = str(lectura.get("codigo", "")).strip()
+                    if codigo and identificador and identificador != st.session_state.get("ultimo_scan_componente"):
+                        st.session_state.ultimo_scan_componente = identificador
+                        st.session_state.search_input = codigo
+                        buscar_producto()
+                        st.rerun(scope="fragment")
+            else:
+                st.text_input(
+                    "Código de barras", key="search_input",
+                    on_change=buscar_producto,
+                    label_visibility="collapsed",
+                    placeholder="Escanea o escribe el código",
+                )
 
 
         logo = cargar_logo_negocio()
