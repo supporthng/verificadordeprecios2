@@ -525,6 +525,44 @@ CSS += """<style>
 }
 </style>"""
 
+
+# Tipografía ampliada para el resultado, ajustada al 2connect horizontal.
+# Se aplica al final para prevalecer sobre las reglas compactas anteriores.
+CSS += """<style>
+.resultado-pantalla .resultado-datos {
+  padding: clamp(10px,2dvh,22px) clamp(14px,3vw,40px) !important;
+  gap: clamp(8px,2dvh,16px) !important;
+}
+.resultado-pantalla .resultado-nombre {
+  font-size: clamp(31px, 4.6vw, 72px) !important;
+  line-height: 1.12 !important;
+  max-width: 96% !important;
+  text-wrap: balance !important;
+}
+.resultado-pantalla .resultado-etiqueta {
+  font-size: clamp(15px, 1.8vw, 23px) !important;
+}
+.resultado-pantalla .resultado-codigo {
+  font-size: clamp(17px, 2.1vw, 27px) !important;
+}
+.resultado-pantalla .resultado-precio-panel {
+  flex-direction: column !important;
+  gap: clamp(5px,1.2dvh,14px) !important;
+}
+.resultado-pantalla .resultado-precio-etiqueta {
+  font-size: clamp(17px, 2.2vw, 27px) !important;
+}
+.resultado-pantalla .resultado-precio {
+  font-size: clamp(64px, 9.5vw, 136px) !important;
+  line-height: 1.05 !important;
+}
+@media (orientation: landscape) and (max-height: 550px) {
+  .resultado-pantalla .resultado-nombre {font-size: clamp(29px,4.2vw,58px) !important;}
+  .resultado-pantalla .resultado-precio {font-size: clamp(59px,8.7vw,112px) !important;}
+  .resultado-pantalla .resultado-datos {gap: 6px !important;}
+}
+</style>"""
+
 st.markdown(CSS, unsafe_allow_html=True)
 
 
