@@ -508,6 +508,38 @@ def verificador():
                 placeholder="Escanea o escribe el código",
             )
 
+            # En cada carga y reconstrucción del campo, activar el cursor del lector.
+            # Se ejecuta DESPUÉS de crear el textbox, dentro del fragmento.
+            components.html(r"""
+<script>
+(() => {
+  try {
+    const doc = window.parent.document;
+    const selector = 'input[placeholder="Escanea o escribe el código"]';
+    let attempts = 0;
+    const focusScanner = () => {
+      const field = doc.querySelector(selector);
+      if (!field) return false;
+      const active = doc.activeElement;
+      // No interrumpir navegación, configuración ni cierre de sesión.
+      if (active && active !== doc.body && active !== doc.documentElement &&
+          active !== field && active.closest('button, a, [role="button"], [role="dialog"], [data-testid="stSidebar"], input, textarea, select')) {
+        return true;
+      }
+      try { field.focus({preventScroll:true}); } catch (_) { field.focus(); }
+      return doc.activeElement === field;
+    };
+    focusScanner();
+    const retry = window.setInterval(() => {
+      attempts += 1;
+      if (focusScanner() || attempts >= 35) window.clearInterval(retry);
+    }, 100);
+  } catch (_) { /* Restricciones del navegador */ }
+})();
+</script>
+""", height=0)
+
+
         logo = cargar_logo_negocio()
         if logo:
             # Logo en la misma columna central y ancho que la imagen del codigo de barras.
@@ -527,45 +559,6 @@ def verificador():
 
 
 
-# Foco persistente en el campo visible, incluso tras rerenderizados de Streamlit.
-# El menu y otros campos interactivos pueden recibir el foco al pulsarlos.
-components.html(r"""
-<script>
-(function () {
-  try {
-    const win = window.parent;
-    const doc = win.document;
-    if (win.__precioFocusCleanup) win.__precioFocusCleanup();
-    let timer = null;
-    const selector = 'input[aria-label="Código de barras"], input[placeholder="Escanea o escribe el código"]';
-    const otherControl = el => !!(el && el.closest('button, a, [role="button"], [role="menu"], [role="dialog"], [data-testid="stSidebar"], textarea, select, input:not([placeholder="Escanea o escribe el código"])'));
-    function restore() {
-      const input = doc.querySelector(selector);
-      if (!input || input.disabled || doc.hidden) return;
-      const active = doc.activeElement;
-      if (active === input || otherControl(active)) return;
-      try { input.focus({preventScroll:true}); } catch (_) { input.focus(); }
-    }
-    function schedule() { clearTimeout(timer); timer = setTimeout(restore, 80); }
-    function onClick(ev) { if (!otherControl(ev.target)) schedule(); }
-    function onKey(ev) { if (ev.key === 'Enter') setTimeout(restore, 180); }
-    doc.addEventListener('click', onClick, true);
-    doc.addEventListener('keydown', onKey, true);
-    const observer = new MutationObserver(schedule);
-    observer.observe(doc.body, {childList:true, subtree:true});
-    const interval = setInterval(restore, 450);
-    win.__precioFocusCleanup = () => {
-      clearTimeout(timer); clearInterval(interval); observer.disconnect();
-      doc.removeEventListener('click', onClick, true);
-      doc.removeEventListener('keydown', onKey, true);
-    };
-    restore();
-    setTimeout(restore, 350);
-    setTimeout(restore, 1200);
-  } catch (e) { /* Algunos navegadores restringen el acceso al marco principal. */ }
-})();
-</script>
-""", height=0)
 
 try:
     verificador()
