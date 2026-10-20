@@ -53,7 +53,7 @@ def verify_state(value):
         expected=hmac.new(setting("GOOGLE_TOKEN_ENCRYPTION_KEY").encode(),
                           payload.encode(),hashlib.sha256).hexdigest()
         return abs(time.time()-int(timestamp))<600 and hmac.compare_digest(signature,expected)
-    except (ValueError,TypeError):
+    except (ValueError, TypeError, UnicodeError, base64.binascii.Error):
         return False
 
 def auth_url(state):
@@ -69,8 +69,25 @@ def exchange_code(code):
         "client_secret":setting("GOOGLE_OAUTH_CLIENT_SECRET"),
         "redirect_uri":setting("GOOGLE_OAUTH_REDIRECT_URI"),
         "grant_type":"authorization_code"},timeout=API_TIMEOUT)
-    r.raise_for_status()
-    return r.json()
+    if not r.ok:
+        # Google proporciona un código de error seguro, sin exponer tokens.
+        try:
+            detail = r.json()
+        except ValueError:
+            detail = {}
+        code = str(detail.get("error", "unknown_error"))
+        explanations = {
+            "invalid_grant": "El código de autorización venció, ya fue utilizado o la URL de retorno cambió. Vuelve a conectar desde Administración.",
+            "invalid_client": "Google no reconoce el ID o el secreto OAuth. Comprueba que ambos pertenezcan al mismo cliente y reemplaza el secreto comprometido.",
+            "redirect_uri_mismatch": "La URL de retorno no coincide exactamente con la registrada en Google Cloud.",
+            "unauthorized_client": "El cliente OAuth no está autorizado para este tipo de acceso.",
+            "invalid_request": "La solicitud de token es inválida. Revisa la URL de retorno y las credenciales del cliente.",
+        }
+        raise RuntimeError("Google rechazó el token (" + code + "): " + explanations.get(code, "Revisa la configuración OAuth y vuelve a intentarlo."))
+    data = r.json()
+    if "access_token" not in data:
+        raise RuntimeError("Google no devolvió un token de acceso válido.")
+    return data
 
 def save_token(data,old=None):
     refresh=data.get("refresh_token") or old
