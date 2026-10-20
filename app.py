@@ -327,6 +327,31 @@ if user and user["must_change_password"]:
                 st.error(str(exc))
     st.stop()
 
+# Google regresa en una sesión nueva: procesar callback después del login.
+# Conservar code/state en URL mientras se autentica el administrador.
+if "code" in st.query_params or "error" in st.query_params:
+    oauth_code = str(st.query_params.get("code", ""))
+    oauth_state = str(st.query_params.get("state", ""))
+    oauth_error = str(st.query_params.get("error", ""))
+    if not es_administrador_autenticado:
+        st.error("Inicia sesión como administrador para completar la conexión de Google.")
+        st.stop()
+    from google_oauth_source import verify_state, exchange_code, connect
+    try:
+        if oauth_error:
+            raise RuntimeError("Google no autorizó la conexión: " + oauth_error)
+        if not oauth_code or not verify_state(oauth_state):
+            raise RuntimeError("La autorización expiró o no es válida. Vuelve a conectar Google.")
+        connect(exchange_code(oauth_code))
+        st.session_state["google_oauth_notice"] = ("success", "Cuenta de Google conectada correctamente.")
+    except Exception as exc:
+        st.session_state["google_oauth_notice"] = ("error", "No se pudo completar la conexión: " + str(exc))
+    finally:
+        for param in ("code", "state", "scope", "authuser", "prompt", "error"):
+            if param in st.query_params:
+                del st.query_params[param]
+    st.rerun()
+
 pages = {"Principal": [
     st.Page("consulta_precios.py", title="Consulta de Precios", icon="🏷️", default=True)
 ]}

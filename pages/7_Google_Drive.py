@@ -18,23 +18,11 @@ try:
 except Exception as e:
     st.error(str(e));st.stop()
 
-# OAuth state atado a la sesión administrativa, de un solo uso.
-code=st.query_params.get("code")
-state=st.query_params.get("state")
-error=st.query_params.get("error")
-if error:
-    st.warning("Google no autorizó la conexión: "+str(error))
-    st.query_params.clear()
-if code:
-    if not verify_state(str(state or "")):
-        st.error("La autorización caducó o no coincide con esta sesión. Intenta conectar de nuevo.")
-    else:
-        try:
-            connect(exchange_code(str(code)))
-            st.success("Cuenta de Google conectada.")
-        except Exception as e:
-            st.error("No se pudo completar la conexión: "+str(e))
-    st.query_params.clear()
+# El retorno de Google se procesa en app.py, después del login.
+notice=st.session_state.pop("google_oauth_notice",None)
+if notice:
+    if notice[0]=="success":st.success(notice[1])
+    else:st.error(notice[1])
 
 try:
     cfg=config() or {}
