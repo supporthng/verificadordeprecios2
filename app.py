@@ -202,7 +202,7 @@ if user["username"].strip().lower() == "consulta" and (solicitar_salida or st.se
     """, unsafe_allow_html=True)
     st.title("🔐 Autorizar salida")
     st.info("Para salir, introduce el usuario y la contraseña del administrador.")
-    with st.form("autorizar_salida_consulta", clear_on_submit=False):
+    with st.form("formulario_credenciales_admin_para_salir", clear_on_submit=False):
         usuario_administrador = st.text_input("Usuario administrador", key="salida_usuario_admin")
         clave_administrador = st.text_input("Contraseña del administrador", type="password", key="salida_clave_admin")
         confirmar_salida = st.form_submit_button("Confirmar salida", use_container_width=True)
