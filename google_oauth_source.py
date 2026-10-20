@@ -150,7 +150,7 @@ def file_id(raw):
     if re.fullmatch(r"[\w-]{20,}",raw):return raw
     raise ValueError("Pega el enlace válido del archivo de Google.")
 
-@st.cache_data(ttl=300,show_spinner=False)
+@st.cache_data(ttl=30,show_spinner=False)
 def read_file(kind,fid,sheet):
     if kind=="excel":
         meta=google_get("https://www.googleapis.com/drive/v3/files/"+fid,
@@ -190,7 +190,7 @@ def parse_price(value):
     if not math.isfinite(value) or value<0:raise ValueError("Precio inválido")
     return value
 
-@st.cache_data(ttl=300,show_spinner=False)
+@st.cache_data(ttl=30,show_spinner=False)
 def catalog(kind,fid,sheet,code_col,name_col,price_col):
     df=read_file(kind,fid,sheet)
     if len({code_col,name_col,price_col})!=3 or not all(x in df.columns for x in (code_col,name_col,price_col)):
