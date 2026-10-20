@@ -1,4 +1,5 @@
 import html
+import base64
 from io import BytesIO
 from PIL import Image, ImageOps
 from datetime import datetime, timedelta, timezone
@@ -722,22 +723,26 @@ def verificador():
 
         logo = cargar_logo_negocio()
         if logo:
-            # Logo en la misma columna central y ancho que la imagen del codigo de barras.
+            # El logo se centra respecto a TODA la pantalla, no respecto
+            # a columnas de Streamlit que varían con el ancho del dispositivo.
             try:
                 with Image.open(BytesIO(logo)) as original:
-                    imagen = ImageOps.contain(original.convert("RGBA"), (180, 120))
-                    lienzo = Image.new("RGBA", (180, 120), (255, 255, 255, 0))
-                    lienzo.alpha_composite(
-                        imagen,
-                        ((180 - imagen.width) // 2, (120 - imagen.height) // 2),
-                    )
-                    # Centrado y más grande en el dispositivo compacto.
-                    izquierda, centro, derecha = st.columns([1, 2, 1])
-                    with centro:
-                        st.image(lienzo, width=145)
+                    imagen = ImageOps.contain(original.convert("RGBA"), (220, 130))
+                    salida = BytesIO()
+                    imagen.save(salida, format="PNG")
+                    imagen_base64 = base64.b64encode(salida.getvalue()).decode("ascii")
+                st.markdown(
+                    '<div style="width:100%;display:flex;justify-content:center;'
+                    'align-items:center;margin:10px auto 0;">'
+                    '<img alt="Logo de la empresa" '
+                    'style="display:block;width:auto;max-width:220px;'
+                    'height:auto;max-height:130px;object-fit:contain;" '
+                    f'src="data:image/png;base64,{imagen_base64}">'
+                    '</div>',
+                    unsafe_allow_html=True,
+                )
             except (OSError, ValueError):
                 pass
-
 
 
 
