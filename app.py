@@ -79,6 +79,37 @@ if not st.session_state.usuario_id and not st.session_state.logout_pendiente:
         else:
             cookies.remove(COOKIE_NAME)
 
+# CookieController recibe las cookies del navegador de forma asíncrona.
+# En una sesión nueva, el primer get() puede devolver None antes de que
+# el componente termine de inicializarse. Reintentar sin pedir credenciales.
+if not st.session_state.usuario_id and not st.session_state.logout_pendiente:
+    @st.fragment(run_every="1s")
+    def _esperar_cookie_recordada():
+        if st.session_state.get("usuario_id"):
+            return
+        token_persistente = cookies.get(COOKIE_NAME)
+        if token_persistente:
+            identificador = _recover(token_persistente)
+            if identificador:
+                st.session_state.usuario_id = identificador
+                st.rerun(scope="app")
+            else:
+                cookies.remove(COOKIE_NAME)
+    _esperar_cookie_recordada()
+
+# Finalizar el inicio recordado tras dar tiempo al navegador a guardar.
+if st.session_state.get("esperando_guardado_login") is not None:
+    @st.fragment(run_every="1s")
+    def _finalizar_login_recordado():
+        if time.monotonic() - st.session_state.esperando_guardado_login >= 2:
+            st.session_state.pop("esperando_guardado_login", None)
+            st.rerun(scope="app")
+    _finalizar_login_recordado()
+
+if st.session_state.get("esperando_guardado_login") is not None:
+    st.info("Guardando acceso en este navegador…")
+    st.stop()
+
 user = current_user()
 # No restaurar automáticamente cuentas con permisos de administración.
 # La opción de recordar acceso es exclusiva de cuentas no administradoras.
@@ -167,10 +198,16 @@ if not user:
                         pass
                     st.session_state.fallos_login = 0
                     st.session_state.logout_pendiente = False
-                    # Salir del modo login solamente tras autenticar correctamente.
                     if "salir" in st.query_params:
                         del st.query_params["salir"]
-                    st.rerun()
+                    if recordar_acceso and not es_administrador:
+                        # Evitar rerun inmediato: el componente de cookies
+                        # necesita un instante para escribir en el navegador.
+                        st.session_state.esperando_guardado_login = time.monotonic()
+                        st.success("Acceso recordado en este dispositivo. Iniciando…")
+                        st.stop()
+                    else:
+                        st.rerun()
                 else:
                     st.session_state.fallos_login += 1
                     if st.session_state.fallos_login >= 5:
