@@ -145,7 +145,18 @@ if not user:
                     st.error("Usuario o contraseña incorrectos.")
     st.stop()
 
-# El cierre de sesión se ofrece en el menú desplegable, no en la barra lateral.
+def _cerrar_sesion():
+    st.session_state.usuario_id = None
+    try:
+        cookies.remove(COOKIE_NAME)
+    except Exception:
+        pass
+    st.rerun()
+
+with st.sidebar:
+    st.caption("Sesión: " + user["username"])
+    if st.button("🚪 Cerrar sesión", key="sidebar_logout"):
+        _cerrar_sesion()
 
 if user and user["must_change_password"]:
     st.title("Cambio obligatorio de contraseña")
@@ -186,24 +197,9 @@ habilitadas = [st.Page(path, title=title, icon=icon)
                 for perm, path, title, icon in config if allowed(user, perm)]
 if habilitadas:
     pages["Configuración"] = habilitadas
-# Acceso a salir siempre visible, incluso con la barra lateral oculta.
-def _cerrar_sesion():
-    st.session_state.usuario_id = None
-    try:
-        cookies.remove(COOKIE_NAME)
-    except Exception:
-        pass
-    st.rerun()
-
-# Registrar las páginas ANTES de utilizar st.switch_page en los botones.
-# De lo contrario, Streamlit puede impedir la navegación desde el menú.
-navigation = st.navigation(pages, position="hidden")
-
-# Menú visible también cuando la barra lateral comienza cerrada.
-# Solo ofrece páginas para las que el usuario tiene permiso.
-with st.popover("☰ Menú / Mi cuenta", use_container_width=False):
+# Menú expandible en la página, independiente de los permisos de configuración.
+with st.expander("☰ Menú / Mi cuenta", expanded=False):
     st.caption("Sesión: " + user["username"])
-    st.markdown("**Principal**")
     if st.button("🏷️ Consulta de Precios", key="menu_consulta", use_container_width=True):
         st.switch_page(pages["Principal"][0])
     if habilitadas:
@@ -215,4 +211,4 @@ with st.popover("☰ Menú / Mi cuenta", use_container_width=False):
     if st.button("🚪 Cerrar sesión", key="menu_cerrar_sesion", use_container_width=True):
         _cerrar_sesion()
 
-navigation.run()
+st.navigation(pages, position="sidebar").run()
