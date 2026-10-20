@@ -59,6 +59,19 @@ def _recover(token):
     except (ValueError, KeyError, TypeError, RuntimeError, OverflowError):
         return None
 
+# Recibir el callback en la RAÍZ, antes del login y de st.navigation.
+# st.navigation puede limpiar los query params al cambiar de página.
+if "code" in st.query_params or "error" in st.query_params:
+    st.session_state["google_oauth_pending"] = {
+        "code": str(st.query_params.get("code", "")),
+        "state": str(st.query_params.get("state", "")),
+        "error": str(st.query_params.get("error", "")),
+        "received_at": time.time(),
+    }
+    for _key in ("code", "state", "scope", "authuser", "prompt", "error"):
+        if _key in st.query_params:
+            del st.query_params[_key]
+
 # La X solicita autorización; nunca cierra sesión sin contraseña de admin.
 solicitar_salida = str(st.query_params.get("salir", "")) == "1"
 
@@ -327,29 +340,22 @@ if user and user["must_change_password"]:
                 st.error(str(exc))
     st.stop()
 
-# Google regresa en una sesión nueva: procesar callback después del login.
-# Conservar code/state en URL mientras se autentica el administrador.
-if "code" in st.query_params or "error" in st.query_params:
-    oauth_code = str(st.query_params.get("code", ""))
-    oauth_state = str(st.query_params.get("state", ""))
-    oauth_error = str(st.query_params.get("error", ""))
-    if not es_administrador_autenticado:
-        st.error("Inicia sesión como administrador para completar la conexión de Google.")
-        st.stop()
+# Completar autorización pendiente después del inicio de sesión administrativo.
+_pending = st.session_state.get("google_oauth_pending")
+if _pending and es_administrador_autenticado:
+    st.session_state.pop("google_oauth_pending", None)
     from google_oauth_source import verify_state, exchange_code, connect
     try:
-        if oauth_error:
-            raise RuntimeError("Google no autorizó la conexión: " + oauth_error)
-        if not oauth_code or not verify_state(oauth_state):
-            raise RuntimeError("La autorización expiró o no es válida. Vuelve a conectar Google.")
-        connect(exchange_code(oauth_code))
+        if time.time() - _pending["received_at"] > 540:
+            raise RuntimeError("La autorización expiró. Conecta Google nuevamente.")
+        if _pending["error"]:
+            raise RuntimeError("Google rechazó la autorización: " + _pending["error"])
+        if not _pending["code"] or not verify_state(_pending["state"]):
+            raise RuntimeError("Estado de autorización inválido o vencido.")
+        connect(exchange_code(_pending["code"]))
         st.session_state["google_oauth_notice"] = ("success", "Cuenta de Google conectada correctamente.")
     except Exception as exc:
         st.session_state["google_oauth_notice"] = ("error", "No se pudo completar la conexión: " + str(exc))
-    finally:
-        for param in ("code", "state", "scope", "authuser", "prompt", "error"):
-            if param in st.query_params:
-                del st.query_params[param]
     st.rerun()
 
 pages = {"Principal": [
