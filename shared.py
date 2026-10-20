@@ -43,14 +43,16 @@ def normalize_header(value):
     return re.sub(r'[^a-z0-9]', '', value.lower())
 
 
-def parse_excel(file):
+def parse_excel(file, mapping=None):
     df = pd.read_excel(io.BytesIO(file.getvalue()), dtype=str, engine='openpyxl')
     names = {normalize_header(c): c for c in df.columns}
     def column(*options):
         return next((names[o] for o in options if o in names), None)
-    nc = column('nombre', 'descripcion', 'producto')
-    bc = column('codigobarra', 'codigobarras', 'codigo', 'barcode')
-    pc = column('precioventa', 'precio')
+    nc = mapping['name'] if mapping is not None else column('nombre', 'descripcion', 'producto')
+    bc = mapping['barcode'] if mapping is not None else column('codigobarra', 'codigobarras', 'codigo', 'barcode')
+    pc = mapping['price'] if mapping is not None else column('precioventa', 'precio')
+    if mapping is not None and (len({nc, bc, pc}) != 3 or any(c not in df.columns for c in (nc, bc, pc))):
+        raise ValueError('Selecciona tres columnas distintas y válidas.')
     if any(c is None for c in (nc, bc, pc)):
         raise ValueError('El Excel requiere Nombre, Código Barra y Precio Venta.')
     products = []
