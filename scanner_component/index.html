@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+html,body{margin:0;padding:0;background:transparent;overflow:hidden;font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+#codigo{display:block;width:100%;box-sizing:border-box;height:48px;border:2px solid #d5e1f1;border-radius:14px;background:#fff;text-align:center;font-size:20px;color:#102b50;padding:5px 12px;outline:none}
+#codigo:focus{border-color:#80b2ef;box-shadow:0 0 0 2px rgba(7,89,201,.08)}
+#codigo::placeholder{color:#8a97aa}
+</style></head><body>
+<input id="codigo" type="text" inputmode="none" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Escanea o escribe el código" aria-label="Código de barras">
+<script>
+(function(){
+ const field=document.getElementById('codigo');
+ function send(type, extra){window.parent.postMessage(Object.assign({isStreamlitMessage:true,type:type},extra||{}),'*')}
+ send('streamlit:componentReady',{apiVersion:1});
+ send('streamlit:setFrameHeight',{height:54});
+ function focus(){try{field.focus({preventScroll:true})}catch(e){field.focus()}}
+ // El campo está dentro de este componente, no en el documento padre.
+ // Reintentos breves para esperar a que Streamlit termine de montar el iframe.
+ [0,100,250,500,900,1500].forEach(t=>setTimeout(focus,t));
+ window.addEventListener('message',function(event){
+   if(event.data && event.data.type==='streamlit:render'){
+     send('streamlit:setFrameHeight',{height:54});
+   }
+ });
+ field.addEventListener('keydown',function(e){
+   if(e.key==='Enter'){
+     e.preventDefault();
+     const codigo=field.value.trim();
+     if(!codigo)return;
+     field.value='';
+     send('streamlit:setComponentValue',{value:{codigo:codigo,id:Date.now().toString()+'-'+Math.random().toString(36).slice(2)}});
+   }
+ });
+ // No recuperar el foco mientras el usuario usa menú u otros controles.
+})();
+</script></body></html>
