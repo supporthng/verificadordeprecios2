@@ -49,8 +49,8 @@ def _recover(token):
         if int(payload["exp"]) <= time.time():
             return None
         from auth_usuarios import api
-        rows = api("GET", {"id": "eq." + str(payload["id"]), "select": "id,password_hash,active", "limit": 1})
-        if not rows or not rows[0]["active"]:
+        rows = api("GET", {"id": "eq." + str(payload["id"]), "select": "id,username,password_hash,active", "limit": 1})
+        if not rows or not rows[0]["active"] or str(rows[0]["username"]).strip().lower() == "admin":
             return None
         version = hashlib.sha256(rows[0]["password_hash"].encode()).hexdigest()[:24]
         if not hmac.compare_digest(payload["v"], version):
@@ -65,6 +65,7 @@ solicitar_salida = str(st.query_params.get("salir", "")) == "1"
 st.session_state.setdefault("usuario_id", None)
 # Impide que una cookie antigua reactive la sesión inmediatamente después de salir.
 st.session_state.setdefault("logout_pendiente", False)
+st.session_state.setdefault("autorizar_salida_consulta", False)
 st.session_state.setdefault("fallos_login", 0)
 st.session_state.setdefault("bloqueo_hasta", 0.0)
 
@@ -79,6 +80,13 @@ if not st.session_state.usuario_id and not st.session_state.logout_pendiente:
             cookies.remove(COOKIE_NAME)
 
 user = current_user()
+# No restaurar automáticamente cuentas con permisos de administración.
+# La opción de recordar acceso es exclusiva de cuentas no administradoras.
+if user and (str(user["username"]).strip().lower() == "admin" or allowed(user, "usuarios")):
+    try:
+        cookies.remove(COOKIE_NAME)
+    except Exception:
+        pass
 if not user:
     st.markdown("""
     <style>
@@ -125,6 +133,11 @@ if not user:
         with st.form("inicio_sesion"):
             nombre = st.text_input("👤 Usuario", placeholder="Ingresa tu usuario")
             clave = st.text_input("🔒 Contraseña", type="password", placeholder="Ingresa tu contraseña")
+            recordar_acceso = st.checkbox(
+                "Recordar mi acceso en este verificador",
+                value=False,
+                help="Disponible solo para usuarios no administradores. Mantiene la sesión iniciada en este equipo durante 30 días; no guarda la contraseña."
+            )
             entrar = st.form_submit_button("➜  Iniciar sesión", use_container_width=True)
         if entrar:
             if time.monotonic() < st.session_state.bloqueo_hasta:
@@ -140,7 +153,18 @@ if not user:
                 if valido:
                     st.session_state.usuario_id = cuenta["id"]
                     st.session_state.logout_pendiente = False
-                    cookies.set(COOKIE_NAME, _token(cuenta), max_age=COOKIE_SECONDS)
+                    # Nunca recordar administradores, aunque marquen la casilla.
+                    es_administrador = (
+                        str(cuenta["username"]).strip().lower() == "admin"
+                        or allowed(cuenta, "usuarios")
+                    )
+                    try:
+                        if recordar_acceso and not es_administrador:
+                            cookies.set(COOKIE_NAME, _token(cuenta), max_age=COOKIE_SECONDS)
+                        else:
+                            cookies.remove(COOKIE_NAME)
+                    except Exception:
+                        pass
                     st.session_state.fallos_login = 0
                     st.session_state.logout_pendiente = False
                     # Salir del modo login solamente tras autenticar correctamente.
@@ -158,6 +182,7 @@ if not user:
 def _cerrar_sesion():
     # Bloquear recuperación desde la cookie durante el cambio a login.
     st.session_state.logout_pendiente = True
+    st.session_state.autorizar_salida_consulta = False
     st.session_state.usuario_id = None
     try:
         cookies.remove(COOKIE_NAME)
@@ -167,7 +192,7 @@ def _cerrar_sesion():
 
 # La X de consulta exige la contraseña de la cuenta administradora.
 # No cerrar ni invalidar la sesión hasta validar la clave en el servidor.
-if user["username"].strip().lower() == "consulta" and solicitar_salida:
+if user["username"].strip().lower() == "consulta" and (solicitar_salida or st.session_state.autorizar_salida_consulta):
     st.markdown("""
     <style>
       [data-testid="stSidebar"], [data-testid="collapsedControl"],
@@ -176,13 +201,15 @@ if user["username"].strip().lower() == "consulta" and solicitar_salida:
     </style>
     """, unsafe_allow_html=True)
     st.title("🔐 Autorizar salida")
-    st.info("Introduce la contraseña del administrador para salir de Consulta de Precios.")
+    st.info("Para salir, introduce el usuario y la contraseña del administrador.")
     with st.form("autorizar_salida_consulta", clear_on_submit=False):
-        clave_administrador = st.text_input("Contraseña del administrador", type="password")
+        usuario_administrador = st.text_input("Usuario administrador", key="salida_usuario_admin")
+        clave_administrador = st.text_input("Contraseña del administrador", type="password", key="salida_clave_admin")
         confirmar_salida = st.form_submit_button("Confirmar salida", use_container_width=True)
     if confirmar_salida:
         try:
-            administrador = get_user("admin")
+            nombre_admin = usuario_administrador.strip()
+            administrador = get_user(nombre_admin) if nombre_admin.lower() == "admin" else None
             valido_admin = bool(
                 administrador and administrador.get("active")
                 and verificar(clave_administrador, administrador["password_hash"])
@@ -192,9 +219,11 @@ if user["username"].strip().lower() == "consulta" and solicitar_salida:
         if valido_admin:
             _cerrar_sesion()
         else:
-            st.error("Contraseña de administrador incorrecta.")
-    if st.button("Volver a Consulta de Precios", key="cancelar_salida_consulta"):
-        del st.query_params["salir"]
+            st.error("Usuario o contraseña del administrador incorrectos. No se ha cerrado la sesión.")
+    if st.button("Cancelar y volver a Consulta de Precios", key="cancelar_salida_consulta"):
+        if "salir" in st.query_params:
+            del st.query_params["salir"]
+        st.session_state.autorizar_salida_consulta = False
         st.rerun()
     st.stop()
 
@@ -222,7 +251,10 @@ if user and user["must_change_password"]:
                 cambiar_password(user, a)
                 # La contraseña cambió: renovar cookie con el nuevo hash.
                 updated = current_user()
-                cookies.set(COOKIE_NAME, _token(updated), max_age=COOKIE_SECONDS)
+                if not (str(updated["username"]).strip().lower() == "admin" or allowed(updated, "usuarios")):
+                    # Solo se renueva una sesión que ya estaba recordada.
+                    if cookies.get(COOKIE_NAME):
+                        cookies.set(COOKIE_NAME, _token(updated), max_age=COOKIE_SECONDS)
                 st.success("Contraseña cambiada.")
                 st.rerun()
             except (ValueError, RuntimeError) as exc:
@@ -256,41 +288,37 @@ if es_solo_consulta:
       [data-testid="stAppViewContainer"] { margin-left: 0 !important; }
     </style>
     """, unsafe_allow_html=True)
-    # Cierre de sesión como X discreta en la esquina superior izquierda.
-    # Se conserva el mecanismo de salida por URL (?salir=1).
+    # Botón Streamlit real: el clic establece el estado en el servidor.
+    # Evita depender de enlaces URL que algunos navegadores integrados ignoran.
     st.markdown("""
     <style>
-      a.consulta-cerrar-x {
+      .st-key-boton_salida_x_consulta {
         position: fixed !important;
-        top: 12px !important;
-        left: 16px !important;
+        top: 10px !important;
+        left: 12px !important;
         z-index: 999999 !important;
-        width: 36px !important;
+        width: 40px !important;
+      }
+      .st-key-boton_salida_x_consulta button {
+        width: 38px !important;
+        min-height: 36px !important;
         height: 36px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        border-radius: 10px !important;
-        background: rgba(255,255,255,.12) !important;
-        border: 1px solid rgba(255,255,255,.38) !important;
+        padding: 0 !important;
+        background: rgba(255,255,255,.18) !important;
         color: white !important;
-        font: 700 26px/1 Arial, sans-serif !important;
-        text-decoration: none !important;
-        box-shadow: none !important;
+        border: 1px solid rgba(255,255,255,.55) !important;
+        border-radius: 8px !important;
+        font-size: 22px !important;
+        font-weight: 800 !important;
       }
-      a.consulta-cerrar-x:hover,
-      a.consulta-cerrar-x:focus-visible {
-        background: rgba(255,255,255,.28) !important;
-        outline: 2px solid white !important;
-      }
-      @media(max-width:600px) {
-        a.consulta-cerrar-x { top: 9px !important; left: 10px !important; }
+      .st-key-boton_salida_x_consulta button:hover {
+        background: rgba(255,255,255,.32) !important;
       }
     </style>
-    <a class="consulta-cerrar-x" href="?salir=1" target="_self"
-       title="Salir (requiere contraseña de administrador)"
-       aria-label="Solicitar salida">&times;</a>
     """, unsafe_allow_html=True)
+    if st.button("✕", key="boton_salida_x_consulta", help="Salir con contraseña del administrador"):
+        st.session_state.autorizar_salida_consulta = True
+        st.rerun()
     posicion_navegacion = "hidden"
 else:
     posicion_navegacion = "sidebar"
