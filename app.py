@@ -193,64 +193,58 @@ def _cerrar_sesion():
 # La X de consulta exige la contraseña de la cuenta administradora.
 # No cerrar ni invalidar la sesión hasta validar la clave en el servidor.
 if user["username"].strip().lower() == "consulta" and (solicitar_salida or st.session_state.autorizar_salida_consulta):
-    st.markdown("""
-    <style>
-      [data-testid="stSidebar"], [data-testid="collapsedControl"],
-      [data-testid="stSidebarCollapsedControl"] {display:none!important;}
-      .block-container {max-width:580px!important; padding-top:clamp(50px,12vh,130px)!important;}
-    </style>
-    """, unsafe_allow_html=True)
-    st.title("🔐 Autorizar salida")
-    st.info("Para salir, introduce el usuario y la contraseña del administrador.")
-    with st.form("formulario_credenciales_admin_para_salir", clear_on_submit=False):
-        usuario_administrador = st.text_input("Usuario administrador", key="salida_usuario_admin")
-        clave_administrador = st.text_input("Contraseña del administrador", type="password", key="salida_clave_admin")
-        confirmar_salida = st.form_submit_button("Confirmar salida", use_container_width=True)
-    if confirmar_salida:
-        try:
-            nombre_admin = usuario_administrador.strip()
-            administrador = get_user(nombre_admin) if nombre_admin.lower() == "admin" else None
-            valido_admin = bool(
-                administrador and administrador.get("active")
-                and verificar(clave_administrador, administrador["password_hash"])
-            )
-        except (RuntimeError, ValueError, TypeError, KeyError):
-            valido_admin = False
-        if valido_admin:
-            _cerrar_sesion()
-        else:
-            st.error("Usuario o contraseña del administrador incorrectos. No se ha cerrado la sesión.")
-    # Si nadie escribe el usuario administrador durante 10 segundos,
-    # activar el mismo boton Cancelar: conserva intacta la sesion de consulta.
-    # No se altera la autenticacion ni se crea una segunda navegacion.
-    st.html(r"""
-    <script>
-    (() => {
-      const doc = window.parent.document;
-      const input = doc.querySelector('input[aria-label="Usuario administrador"]');
-      if (!input) return;
-      const cancelar = () => {
-        const botones = [...doc.querySelectorAll('button')];
-        return botones.find(b => b.textContent.includes('Cancelar y volver a Consulta de Precios'));
-      };
-      // Un solo temporizador por instancia del formulario; evita reiniciarlo
-      // en cada actualizacion de Streamlit.
-      if (window.__temporizadorSalidaAdminInput === input) return;
-      window.__temporizadorSalidaAdminInput = input;
-      setTimeout(() => {
-        if (!input.isConnected) return;
-        if (input.value.trim() !== '') return;
-        const boton = cancelar();
-        if (boton && !boton.disabled) boton.click();
-      }, 10000);
-    })();
-    </script>
-    """, unsafe_allow_javascript=True)
-    if st.button("Cancelar y volver a Consulta de Precios", key="cancelar_salida_consulta"):
-        if "salir" in st.query_params:
-            del st.query_params["salir"]
-        st.session_state.autorizar_salida_consulta = False
-        st.rerun()
+    # Temporizador en el servidor: no depende de que el navegador ejecute JavaScript.
+    if "inicio_autorizacion_admin" not in st.session_state:
+        st.session_state.inicio_autorizacion_admin = time.monotonic()
+
+    @st.fragment(run_every="1s")
+    def pantalla_autorizacion_admin():
+        st.markdown("""
+        <style>
+          [data-testid="stSidebar"], [data-testid="collapsedControl"],
+          [data-testid="stSidebarCollapsedControl"] {display:none!important;}
+          .block-container {max-width:580px!important; padding-top:clamp(50px,12vh,130px)!important;}
+        </style>
+        """, unsafe_allow_html=True)
+
+        # Campo fuera del formulario para detectar si el usuario comienza a escribir.
+        nombre_admin = str(st.session_state.get("salida_usuario_admin", "")).strip()
+        transcurridos = time.monotonic() - st.session_state.inicio_autorizacion_admin
+        if not nombre_admin and transcurridos >= 10:
+            st.session_state.autorizar_salida_consulta = False
+            st.session_state.pop("inicio_autorizacion_admin", None)
+            if "salir" in st.query_params:
+                del st.query_params["salir"]
+            st.rerun(scope="app")
+
+        st.title("🔐 Autorizar salida")
+        st.info("Para salir, introduce el usuario y la contraseña del administrador.")
+        st.text_input("Usuario administrador", key="salida_usuario_admin")
+        if not nombre_admin:
+            st.caption(f"Regreso automático a Consulta de Precios en {max(0, 10 - int(transcurridos))} segundos si no escribe el usuario.")
+        with st.form("formulario_credenciales_admin_para_salir", clear_on_submit=False):
+            clave_administrador = st.text_input("Contraseña del administrador", type="password", key="salida_clave_admin")
+            confirmar_salida = st.form_submit_button("Confirmar salida", use_container_width=True)
+        if confirmar_salida:
+            try:
+                administrador = get_user(nombre_admin) if nombre_admin.lower() == "admin" else None
+                valido_admin = bool(administrador and administrador.get("active")
+                                    and verificar(clave_administrador, administrador["password_hash"]))
+            except (RuntimeError, ValueError, TypeError, KeyError):
+                valido_admin = False
+            if valido_admin:
+                st.session_state.pop("inicio_autorizacion_admin", None)
+                _cerrar_sesion()
+            else:
+                st.error("Usuario o contraseña del administrador incorrectos. No se ha cerrado la sesión.")
+        if st.button("Cancelar y volver a Consulta de Precios", key="cancelar_salida_consulta"):
+            st.session_state.autorizar_salida_consulta = False
+            st.session_state.pop("inicio_autorizacion_admin", None)
+            if "salir" in st.query_params:
+                del st.query_params["salir"]
+            st.rerun(scope="app")
+
+    pantalla_autorizacion_admin()
     st.stop()
 
 # La cuenta exclusiva de consulta no necesita navegación lateral.
