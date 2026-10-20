@@ -197,4 +197,36 @@ habilitadas = [st.Page(path, title=title, icon=icon)
                 for perm, path, title, icon in config if allowed(user, perm)]
 if habilitadas:
     pages["Configuración"] = habilitadas
+# Al entrar como usuario de solo consulta, cerrar una vez la barra lateral.
+# El marcador vive en el documento del navegador: no se repite en cada rerun
+# y permite que el usuario vuelva a abrir el menú manualmente.
+if user["username"].strip().lower() == "consulta":
+    st.html(r"""
+    <script>
+    (() => {
+      const doc = window.parent.document;
+      const marker = 'data-consulta-sidebar-inicializada';
+      if (doc.documentElement.hasAttribute(marker)) return;
+      doc.documentElement.setAttribute(marker, '1');
+      let intentos = 0;
+      function cerrarInicialmente() {
+        const sidebar = doc.querySelector('section[data-testid="stSidebar"]');
+        if (!sidebar) {
+          if (++intentos < 25) setTimeout(cerrarInicialmente, 120);
+          return;
+        }
+        const abierta = sidebar.getAttribute('aria-expanded') === 'true' ||
+          sidebar.getAttribute('data-expanded') === 'true' ||
+          (sidebar.getBoundingClientRect().width > 200 &&
+           getComputedStyle(sidebar).transform === 'none');
+        if (!abierta) return;
+        const boton = sidebar.querySelector('[data-testid="stSidebarCollapseButton"] button, button[data-testid="stSidebarCollapseButton"], button[aria-label="Close sidebar"], button[aria-label="Cerrar barra lateral"]');
+        if (boton) boton.click();
+        else if (++intentos < 25) setTimeout(cerrarInicialmente, 120);
+      }
+      setTimeout(cerrarInicialmente, 100);
+    })();
+    </script>
+    """)
+
 st.navigation(pages, position="sidebar").run()
