@@ -184,6 +184,8 @@ def _cerrar_sesion():
     st.session_state.logout_pendiente = True
     st.session_state.autorizar_salida_consulta = False
     st.session_state.usuario_id = None
+    for permiso_temporal in ("admin_authenticated", "fuentes_admin_ok", "external_admin_ok"):
+        st.session_state[permiso_temporal] = False
     try:
         cookies.remove(COOKIE_NAME)
     except Exception:
@@ -263,6 +265,14 @@ if user["username"].strip().lower() == "consulta" and (solicitar_salida or st.se
 
     pantalla_autorizacion_admin()
     st.stop()
+
+# La autenticación principal del administrador también autoriza los módulos
+# antiguos que antes pedían una segunda contraseña por separado.
+# Se recalcula en cada ejecución: nunca heredar permisos de otro usuario.
+es_administrador_autenticado = str(user["username"]).strip().lower() == "admin"
+st.session_state["admin_authenticated"] = es_administrador_autenticado
+st.session_state["fuentes_admin_ok"] = es_administrador_autenticado
+st.session_state["external_admin_ok"] = es_administrador_autenticado
 
 # La cuenta exclusiva de consulta no necesita navegación lateral.
 es_solo_consulta = user["username"].strip().lower() == "consulta"
