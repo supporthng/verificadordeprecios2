@@ -468,6 +468,52 @@ CSS += """<style>
 .animated-barcode-card.barcode-not-found .animated-bars::after {display:none !important;animation:none !important;}
 .scan-title.scan-title-not-found {color:#b91c1c !important;font-weight:800 !important;}
 </style>"""
+
+# Resultado de producto: aprovechar la altura del visor del 2connect.
+# No afecta la pantalla de espera ni el estado de producto no encontrado.
+CSS += """<style>
+.product-card.result-card {
+  min-height: 85dvh !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: clamp(8px, 2dvh, 20px) !important;
+  padding: clamp(16px, 3dvh, 36px) clamp(12px, 3vw, 40px) !important;
+  margin: 0 auto !important;
+}
+.result-card .product-name {
+  font-size: clamp(24px, 4.1vw, 54px) !important;
+  line-height: 1.13 !important;
+  max-width: 100%;
+  text-wrap: balance;
+  margin: 0 !important;
+}
+.result-card .product-code {
+  font-size: clamp(16px, 2vw, 24px) !important;
+  margin: 0 !important;
+}
+.result-card .product-price {
+  font-size: clamp(52px, 8vw, 104px) !important;
+  line-height: 1.05 !important;
+  margin: 0 !important;
+}
+@media (orientation: landscape) and (max-height: 650px) {
+  .product-card.result-card {
+    min-height: 87dvh !important;
+    gap: clamp(5px, 1.5dvh, 12px) !important;
+    padding: 12px 20px !important;
+  }
+  .result-card .product-name {font-size: clamp(23px, 3.5vw, 45px) !important;}
+  .result-card .product-price {font-size: clamp(48px, 7vw, 86px) !important;}
+  .result-card .product-label, .result-card .price-label {
+    font-size: clamp(13px, 1.6vw, 19px) !important;
+  }
+}
+</style>"""
+
 st.markdown(CSS, unsafe_allow_html=True)
 
 
