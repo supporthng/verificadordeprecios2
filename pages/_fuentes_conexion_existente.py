@@ -68,6 +68,7 @@ def completed(row):
 
 def store_selection(row):
     st.session_state.lan_selection = row
+    st.session_state.pop('lan_seleccion_anterior', None)
     st.session_state.lan_request_id = row['id']
     st.session_state.pop('lan_request_expires', None)
 
@@ -97,7 +98,7 @@ if not st.session_state.get('lan_selection'):
         row = get_request(request_id) if request_id else None
         if completed(row):
             store_selection(row)
-        elif not request_id and not st.session_state.get('lan_force_new'):
+        elif not request_id and not st.session_state.get('lan_force_new') and not st.session_state.get('lan_seleccion_anterior'):
             recent = supabase('GET', params={
                 'status': 'eq.selected',
                 'selected_database': 'not.is.null',
@@ -214,12 +215,49 @@ if selected:
             st.warning('Esperando respuesta de Supabase…')
 
     verificar_conexion_sql()
-    if st.button('Configurar otro servidor'):
-        for key in ('lan_selection', 'lan_request_id', 'lan_request_expires', 'lan_bridge_url'):
-            st.session_state.pop(key, None)
-        st.session_state.lan_force_new = True
-        st.rerun()
+    # La acción de agregar un servidor requiere confirmación. Nunca elimina
+    # registros de Supabase ni modifica la fuente activa del verificador.
+    if st.button('Configurar otro servidor', key='lan_abrir_confirmacion'):
+        st.session_state['lan_confirmar_nuevo_servidor'] = True
+
+    if st.session_state.get('lan_confirmar_nuevo_servidor', False):
+        st.warning(
+            '¿Deseas iniciar la configuración de otro servidor? '
+            'La conexión actual seguirá guardada en Supabase y la fuente activa '
+            'no cambiará. Solo se abrirá un nuevo asistente.'
+        )
+        col_confirmar, col_cancelar = st.columns(2)
+        with col_confirmar:
+            confirmar = st.button('Sí, configurar otro servidor',
+                                  type='primary', key='lan_confirmar_agregar')
+        with col_cancelar:
+            cancelar = st.button('Cancelar', key='lan_cancelar_agregar')
+        if cancelar:
+            st.session_state.pop('lan_confirmar_nuevo_servidor', None)
+            st.rerun()
+        if confirmar:
+            # Copia temporal para poder identificar la conexión anterior durante
+            # la configuración. No se borra ni se actualiza la BD existente.
+            st.session_state['lan_seleccion_anterior'] = dict(selected)
+            st.session_state.pop('lan_confirmar_nuevo_servidor', None)
+            for state_key in ('lan_selection', 'lan_request_id',
+                              'lan_request_expires', 'lan_bridge_url'):
+                st.session_state.pop(state_key, None)
+            st.session_state['lan_force_new'] = True
+            st.rerun()
 else:
+    if st.session_state.get('lan_seleccion_anterior'):
+        anterior = st.session_state['lan_seleccion_anterior']
+        st.info('Conexión anterior conservada: ' + str(anterior.get('selected_host') or '—')
+                + ' / ' + str(anterior.get('selected_database') or '—')
+                + '. Configurar otra no la elimina ni la desactiva.')
+        if st.button('Cancelar nueva configuración y volver a la anterior',
+                     key='lan_volver_anterior'):
+            st.session_state['lan_selection'] = st.session_state.pop('lan_seleccion_anterior')
+            st.session_state['lan_request_id'] = st.session_state['lan_selection']['id']
+            for state_key in ('lan_request_expires', 'lan_bridge_url', 'lan_force_new'):
+                st.session_state.pop(state_key, None)
+            st.rerun()
     if st.session_state.pop('lan_force_new', False):
         st.session_state.lan_request_id = None
     request_id = st.session_state.get('lan_request_id')
