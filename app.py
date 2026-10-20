@@ -64,7 +64,7 @@ st.session_state.setdefault("fallos_login", 0)
 st.session_state.setdefault("bloqueo_hasta", 0.0)
 
 # Recuperar sesión al refrescar la página o reabrir el navegador.
-if not st.session_state.usuario_id and not st.session_state.get("logout_pendiente", False):
+if not st.session_state.usuario_id:
     token = cookies.get(COOKIE_NAME)
     if token:
         restored_id = _recover(token)
@@ -134,7 +134,6 @@ if not user:
                     cuenta = None
                 if valido:
                     st.session_state.usuario_id = cuenta["id"]
-                    st.session_state.logout_pendiente = False
                     cookies.set(COOKIE_NAME, _token(cuenta), max_age=COOKIE_SECONDS)
                     st.session_state.fallos_login = 0
                     st.rerun()
@@ -146,20 +145,7 @@ if not user:
                     st.error("Usuario o contraseña incorrectos.")
     st.stop()
 
-def _cerrar_sesion():
-    # Bloquear la restauración de una cookie antigua mientras se elimina.
-    st.session_state.usuario_id = None
-    st.session_state.logout_pendiente = True
-    try:
-        cookies.remove(COOKIE_NAME)
-    except Exception:
-        pass
-    st.rerun()
-
-with st.sidebar:
-    st.caption("Sesión: " + user["username"])
-    if st.button("🚪 Cerrar sesión", key="salir_sidebar"):
-        _cerrar_sesion()
+# El cierre de sesión se ofrece en el menú desplegable, no en la barra lateral.
 
 if user and user["must_change_password"]:
     st.title("Cambio obligatorio de contraseña")
@@ -196,11 +182,22 @@ config = [
     ("logo", "pages/3_Logo_del_negocio.py", "Logo del Negocio", "🖼️"),
     ("usuarios", "pages/5_Administrador_Usuarios.py", "Administrador de Usuarios", "👥"),
 ]
-opciones_permitidas = [(title, st.Page(path, title=title, icon=icon))
-                       for perm, path, title, icon in config if allowed(user, perm)]
-habilitadas = [pagina for _, pagina in opciones_permitidas]
+habilitadas = [st.Page(path, title=title, icon=icon)
+                for perm, path, title, icon in config if allowed(user, perm)]
 if habilitadas:
     pages["Configuración"] = habilitadas
+# Acceso a salir siempre visible, incluso con la barra lateral oculta.
+def _cerrar_sesion():
+    st.session_state.usuario_id = None
+    try:
+        cookies.remove(COOKIE_NAME)
+    except Exception:
+        pass
+    st.rerun()
+
+# Registrar las páginas ANTES de utilizar st.switch_page en los botones.
+# De lo contrario, Streamlit puede impedir la navegación desde el menú.
+navigation = st.navigation(pages, position="hidden")
 
 # Menú visible también cuando la barra lateral comienza cerrada.
 # Solo ofrece páginas para las que el usuario tiene permiso.
@@ -211,11 +208,11 @@ with st.popover("☰ Menú / Mi cuenta", use_container_width=False):
         st.switch_page(pages["Principal"][0])
     if habilitadas:
         st.markdown("**Configuración**")
-        for i, (titulo, pagina) in enumerate(opciones_permitidas):
-            if st.button(titulo, key=f"menu_config_{i}", use_container_width=True):
+        for i, pagina in enumerate(habilitadas):
+            if st.button(pagina.title, key=f"menu_config_{i}", use_container_width=True):
                 st.switch_page(pagina)
     st.divider()
     if st.button("🚪 Cerrar sesión", key="menu_cerrar_sesion", use_container_width=True):
         _cerrar_sesion()
 
-st.navigation(pages, position="sidebar").run()
+navigation.run()
