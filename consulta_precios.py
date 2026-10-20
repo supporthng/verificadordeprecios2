@@ -298,6 +298,74 @@ div[data-testid="stTextInput"] input:focus-visible {
 }
 </style>
 """
+
+# Ajuste para pantallas integradas de verificadores (ej. 2connect).
+# Se preserva la lógica del escáner, el enfoque y los tiempos de resultados.
+CSS += """
+<style>
+@media (max-height: 720px) and (min-width: 600px) {
+  [data-testid="stMainBlockContainer"], .block-container {
+    padding-top: 0.25rem !important;
+    padding-bottom: 0.2rem !important;
+  }
+  [data-testid="stVerticalBlock"] { gap: 0.35rem !important; }
+  .main-header {
+    padding: 9px 14px !important;
+    margin-bottom: 2px !important;
+    border-radius: 12px !important;
+  }
+  .main-header h1 { font-size: clamp(19px, 3.2vh, 27px) !important; }
+  .main-header p { font-size: 11px !important; margin-top: 2px !important; }
+  .animated-barcode-card {
+    height: auto !important;
+    width: min(260px, 60vw) !important;
+    padding: 8px 12px 6px !important;
+    margin: 1px auto 2px !important;
+  }
+  .animated-bars { height: clamp(45px, 11vh, 70px) !important; }
+  .animated-barcode-caption { margin-top: 3px !important; font-size: 12px !important; }
+  .scan-title { margin: 2px 0 !important; font-size: clamp(17px, 3vh, 23px) !important; }
+  div[data-testid="stTextInput"] input {
+    height: 39px !important;
+    min-height: 39px !important;
+  }
+  [data-testid="stImage"] img {
+    max-height: clamp(55px, 14vh, 88px) !important;
+    width: auto !important;
+    object-fit: contain !important;
+    margin: 0 auto !important;
+  }
+  [data-testid="stImage"] { text-align: center !important; }
+  .product-card.result-card {
+    min-height: 68dvh !important;
+    padding: 12px 20px !important;
+  }
+}
+@media (max-height: 480px) and (min-width: 600px) {
+  .main-header { padding: 6px 12px !important; }
+  .animated-bars { height: 42px !important; }
+  .animated-barcode-card { padding: 5px 10px 3px !important; }
+  .scan-title { font-size: 17px !important; }
+  [data-testid="stImage"] img { max-height: 54px !important; }
+}
+</style>
+"""
+
+# El textbox sigue en el DOM y recibe el foco y los codigos del escaner.
+# Se oculta solo visualmente: NO usar display:none ni visibility:hidden.
+CSS += """
+<style>
+div[data-testid="stTextInput"] {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    overflow: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+</style>
+"""
+
 st.markdown(CSS, unsafe_allow_html=True)
 
 
