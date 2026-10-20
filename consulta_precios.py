@@ -441,6 +441,20 @@ CSS += """
 </style>
 """
 
+# Prioridad sobre reglas de pantallas compactas anteriores.
+CSS += """
+<style>
+@media (max-height: 800px) and (min-width: 600px) {
+  [data-testid="stImage"] { display: flex !important; justify-content: center !important; }
+  [data-testid="stImage"] img {
+    max-height: 112px !important;
+    max-width: 145px !important;
+    width: auto !important;
+    object-fit: contain !important;
+  }
+}
+</style>
+"""
 st.markdown(CSS, unsafe_allow_html=True)
 
 
@@ -717,9 +731,10 @@ def verificador():
                         imagen,
                         ((180 - imagen.width) // 2, (120 - imagen.height) // 2),
                     )
-                    izquierda, centro, derecha = st.columns([2, 1, 2])
+                    # Centrado y más grande en el dispositivo compacto.
+                    izquierda, centro, derecha = st.columns([1, 2, 1])
                     with centro:
-                        st.image(lienzo, use_container_width=True)
+                        st.image(lienzo, width=145)
             except (OSError, ValueError):
                 pass
 
