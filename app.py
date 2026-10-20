@@ -97,19 +97,6 @@ if not st.session_state.usuario_id and not st.session_state.logout_pendiente:
                 cookies.remove(COOKIE_NAME)
     _esperar_cookie_recordada()
 
-# Finalizar el inicio recordado tras dar tiempo al navegador a guardar.
-if st.session_state.get("esperando_guardado_login") is not None:
-    @st.fragment(run_every="1s")
-    def _finalizar_login_recordado():
-        if time.monotonic() - st.session_state.esperando_guardado_login >= 2:
-            st.session_state.pop("esperando_guardado_login", None)
-            st.rerun(scope="app")
-    _finalizar_login_recordado()
-
-if st.session_state.get("esperando_guardado_login") is not None:
-    st.info("Guardando acceso en este navegador…")
-    st.stop()
-
 user = current_user()
 # No restaurar automáticamente cuentas con permisos de administración.
 # La opción de recordar acceso es exclusiva de cuentas no administradoras.
@@ -200,14 +187,9 @@ if not user:
                     st.session_state.logout_pendiente = False
                     if "salir" in st.query_params:
                         del st.query_params["salir"]
-                    if recordar_acceso and not es_administrador:
-                        # Evitar rerun inmediato: el componente de cookies
-                        # necesita un instante para escribir en el navegador.
-                        st.session_state.esperando_guardado_login = time.monotonic()
-                        st.success("Acceso recordado en este dispositivo. Iniciando…")
-                        st.stop()
-                    else:
-                        st.rerun()
+                    # El acceso ya está validado: mostrar Consulta de Precios
+                    # inmediatamente. No bloquear la página esperando la cookie.
+                    st.rerun()
                 else:
                     st.session_state.fallos_login += 1
                     if st.session_state.fallos_login >= 5:
