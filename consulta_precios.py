@@ -286,6 +286,18 @@ div[data-testid="stTextInput"] input {
 @media (max-width: 600px) { .animated-barcode-card { width: min(260px, 76vw); } }
 </style>
 """
+# Color verde del campo de la antigua Prueba del Cursor.
+# Solo modifica la apariencia; no cambia el mecanismo de enfoque.
+CSS += """
+<style>
+div[data-testid="stTextInput"] input:focus,
+div[data-testid="stTextInput"] input:focus-visible {
+    outline: none !important;
+    border-color: #16823c !important;
+    box-shadow: 0 0 0 3px #d9f5df !important;
+}
+</style>
+"""
 st.markdown(CSS, unsafe_allow_html=True)
 
 
