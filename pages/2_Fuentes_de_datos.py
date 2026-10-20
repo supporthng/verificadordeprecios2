@@ -13,12 +13,15 @@ tab_connection, tab_selection = st.tabs(["🔌 Conexión", "🎯 Selección"])
 
 with tab_connection:
     st.caption("Conecta y configura los orígenes. Guardar una conexión no cambia la fuente activa.")
+    if allowed(user, "cargar_archivo"):
+        with st.expander("📁 Cargar archivo Excel local", expanded=False):
+            st.caption("Carga, revisa y publica el archivo Excel usando el módulo actual, sin cambiar su funcionamiento.")
+            runpy.run_path("pages/_fuentes_carga_excel.py", run_name="__main__")
     with st.expander("☁️ Google Drive / Sheets", expanded=True):
         runpy.run_path("pages/_fuentes_google_conexion.py", run_name="__main__")
     with st.expander("🖥️ Base de datos externa / Conector Windows", expanded=False):
         runpy.run_path("pages/_fuentes_conexion_existente.py", run_name="__main__")
-    st.info("Supabase ya utiliza la conexión configurada en los Secrets de Streamlit. "
-            "La carga de archivos Excel locales se mantiene en Cargar Archivo Local.")
+    st.info("Supabase utiliza la conexión configurada en Streamlit Secrets.")
 
 with tab_selection:
     st.subheader("Fuente activa de consulta de precios")

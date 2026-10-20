@@ -59,45 +59,36 @@ def _recover(token):
     except (ValueError, KeyError, TypeError, RuntimeError, OverflowError):
         return None
 
-# Retorno OAuth: retirar el código de la URL ANTES de contactar a Google.
-# Google permite canjear cada código una sola vez; Streamlit puede reejecutar
-# este script cuando cambian los parámetros o se reconecta el navegador.
+# Procesar el retorno OAuth en la raíz ANTES del login y de st.navigation.
+# El regreso desde accounts.google.com crea una sesión nueva de Streamlit:
+# st.session_state NO es una ubicación fiable para retener el código OAuth.
+# La autorización solo puede haberse iniciado desde la página administrativa,
+# que genera un state firmado con caducidad (verify_state).
 if "code" in st.query_params or "error" in st.query_params:
     _oauth_code = str(st.query_params.get("code", ""))
     _oauth_state = str(st.query_params.get("state", ""))
     _oauth_error = str(st.query_params.get("error", ""))
-    _oauth_fingerprint = hashlib.sha256(
-        (_oauth_code + "|" + _oauth_state + "|" + _oauth_error).encode()
-    ).hexdigest()
-
-    # Eliminar primero los parámetros sensibles del navegador. Conservar otros
-    # parámetros de la aplicación que no pertenezcan a Google.
-    for _key in ("code", "state", "scope", "authuser", "prompt", "error", "iss"):
-        if _key in st.query_params:
-            del st.query_params[_key]
-
-    # Impedir un segundo canje dentro de la misma sesión de Streamlit.
-    if st.session_state.get("google_oauth_last_attempt") != _oauth_fingerprint:
-        st.session_state["google_oauth_last_attempt"] = _oauth_fingerprint
-        try:
-            from google_oauth_source import verify_state, exchange_code, connect
-            if _oauth_error:
-                raise RuntimeError("Google rechazó la autorización: " + _oauth_error)
-            if not _oauth_code or not verify_state(_oauth_state):
-                raise RuntimeError(
-                    "Autorización inválida o vencida. Inicia nuevamente desde Administración."
-                )
-            # El state firmado se verifica antes del canje; no exponer el código.
-            _token_data = exchange_code(_oauth_code)
-            connect(_token_data)
-            st.session_state["google_oauth_notice"] = (
-                "success",
-                "Cuenta de Google conectada correctamente. Inicia sesión como administrador para continuar.",
-            )
-        except Exception as exc:
-            st.session_state["google_oauth_notice"] = (
-                "error", "No se pudo completar la conexión Google: " + str(exc)
-            )
+    try:
+        from google_oauth_source import verify_state, exchange_code, connect
+        if _oauth_error:
+            raise RuntimeError("Google rechazó la autorización: " + _oauth_error)
+        if not _oauth_code or not verify_state(_oauth_state):
+            raise RuntimeError("Autorización inválida o vencida. Inicia nuevamente desde Administración.")
+        # No depende del login de Streamlit. El state firmado fue emitido
+        # únicamente desde la página administrativa protegida.
+        connect(exchange_code(_oauth_code))
+        st.session_state["google_oauth_notice"] = (
+            "success", "Cuenta de Google conectada correctamente. Inicia sesión como administrador para continuar."
+        )
+    except Exception as exc:
+        st.session_state["google_oauth_notice"] = (
+            "error", "No se pudo completar la conexión Google: " + str(exc)
+        )
+    finally:
+        # Limpiar el código de un solo uso después de intentar el canje.
+        for _key in ("code", "state", "scope", "authuser", "prompt", "error", "iss"):
+            if _key in st.query_params:
+                del st.query_params[_key]
 
 # La X solicita autorización; nunca cierra sesión sin contraseña de admin.
 solicitar_salida = str(st.query_params.get("salir", "")) == "1"
@@ -385,11 +376,9 @@ pages = {"Principal": [
     st.Page("consulta_precios.py", title="Consulta de Precios", icon="🏷️", default=True)
 ]}
 config = [
-    ("cargar_archivo", "pages/1_Administracion.py", "Cargar Archivo Local", "📁"),
     ("consultar_base", "pages/4_Listado_Productos.py", "Consulta de Base de Datos", "📋"),
     ("fuentes", "pages/2_Fuentes_de_datos.py", "Fuentes de Datos", "🔌"),
     ("configurar", "pages/3_Consulta_Bases_de_Datos.py", "Configurar Consulta", "⚙️"),
-    ("configurar", "pages/7_Google_Drive.py", "Google Drive / Sheets", "☁️"),
     ("logo", "pages/3_Logo_del_negocio.py", "Logo del Negocio", "🖼️"),
     ("usuarios", "pages/5_Administrador_Usuarios.py", "Administrador de Usuarios", "👥"),
 ]
