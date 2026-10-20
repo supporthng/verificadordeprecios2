@@ -31,6 +31,18 @@ html,body{margin:0;padding:0;background:transparent;overflow:hidden;font-family:
      send('streamlit:setComponentValue',{value:{codigo:codigo,id:Date.now().toString()+'-'+Math.random().toString(36).slice(2)}});
    }
  });
- // No recuperar el foco mientras el usuario usa menú u otros controles.
+ // Reenfocar al volver a la pestaña, sin bloquear los controles de la aplicación.
+ window.addEventListener('focus',()=>setTimeout(focus,100));
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(focus,100)});
+ field.addEventListener('blur',()=>{
+   setTimeout(()=>{
+     try {
+       const doc=window.parent.document, active=doc.activeElement;
+       if(active && active!==window.frameElement && active!==doc.body && active!==doc.documentElement)return;
+       focus();
+     }catch(e){}
+   },150);
+ });
+
 })();
 </script></body></html>
