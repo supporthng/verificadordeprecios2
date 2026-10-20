@@ -515,81 +515,24 @@ CSS += """<style>
 </style>"""
 
 
-# Diseño de producto encontrado: dos zonas claras y precio destacado.
+# Pantalla de resultado con imagen, diseñada para 2connect horizontal.
 CSS += """<style>
-.product-card.result-card {
-  width: 100% !important;
-  height: auto !important;
-  min-height: 82dvh !important;
-  padding: clamp(12px, 2.5dvh, 26px) clamp(14px, 3vw, 36px) !important;
-  margin: 0 auto !important;
-  display: flex !important;
-  flex-direction: column !important;
-  justify-content: space-between !important;
-  align-items: stretch !important;
-  gap: clamp(10px, 2dvh, 20px) !important;
-  border-radius: 18px !important;
-  box-sizing: border-box !important;
-}
-.result-card .result-info {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  flex: 1 1 auto;
-  gap: clamp(5px, 1dvh, 12px);
-  min-height: 0;
-}
-.result-card .product-label {
-  font-size: clamp(13px, 1.5vw, 19px) !important;
-  font-weight: 800 !important;
-  letter-spacing: .16em !important;
-  color: #687a94 !important;
-}
-.result-card .product-name {
-  font-size: clamp(26px, 3.3vw, 51px) !important;
-  line-height: 1.12 !important;
-  font-weight: 850 !important;
-  max-width: 100% !important;
-  overflow-wrap: anywhere;
-  text-wrap: balance;
-  margin: 0 !important;
-  color: #0c315e !important;
-}
-.result-card .product-code {
-  font-size: clamp(15px, 1.55vw, 23px) !important;
-  color: #667891 !important;
-  margin: 0 !important;
-}
-.result-card .result-price-panel {
-  flex: 0 0 auto;
-  width: 100%;
-  box-sizing: border-box;
-  background: #eaf2ff;
-  border: 1px solid #c9dcfa;
-  border-radius: 18px;
-  padding: clamp(12px, 2.4dvh, 24px) 10px;
-  text-align: center;
-}
-.result-card .price-label {
-  color: #174b91 !important;
-  font-size: clamp(14px, 1.7vw, 21px) !important;
-  font-weight: 800 !important;
-  letter-spacing: .12em !important;
-}
-.result-card .product-price {
-  font-size: clamp(54px, 7.2vw, 108px) !important;
-  font-weight: 900 !important;
-  line-height: 1.06 !important;
-  color: #164bc5 !important;
-  margin: 3px 0 0 !important;
-  overflow-wrap: anywhere;
-}
-@media (orientation: landscape) and (max-height: 650px) {
-  .product-card.result-card {min-height: 82dvh !important; padding: 10px 20px !important; gap: 8px !important;}
-  .result-card .product-name {font-size: clamp(24px, 3.2vw, 45px) !important;}
-  .result-card .product-price {font-size: clamp(49px, 6.6vw, 85px) !important;}
-  .result-card .result-price-panel {padding: 10px 8px;}
+.found-layout{display:grid;grid-template-columns:34% 66%;width:100%;height:clamp(300px,86dvh,720px);max-height:86dvh;overflow:hidden;background:#f8fbff;border-radius:20px;border:1px solid #dce8f8;box-shadow:0 7px 24px #0b326016;margin:0 auto;box-sizing:border-box}
+.found-photo-panel{display:flex;align-items:center;justify-content:center;min-width:0;padding:clamp(8px,2vw,24px);background:linear-gradient(145deg,#f4faff,#e4f1ff)}
+.found-photo{display:block;width:100%;height:100%;object-fit:contain;max-height:75dvh}
+.found-photo-placeholder{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#6b84a3;text-align:center;font-size:clamp(10px,1.3vw,15px);font-weight:700}
+.found-info{display:flex;flex-direction:column;min-width:0;justify-content:center;text-align:center;gap:clamp(6px,1.8dvh,18px);padding:clamp(12px,2.3vw,32px)}
+.found-caption,.found-price-caption{font-size:clamp(12px,1.5vw,20px);font-weight:800;letter-spacing:1.5px;color:#536b8c}
+.found-name{font-size:clamp(23px,3.2vw,58px);line-height:1.1;font-weight:900;color:#102e58;overflow-wrap:anywhere;text-wrap:balance}
+.found-code{font-size:clamp(12px,1.6vw,21px);color:#6b809e;overflow-wrap:anywhere}
+.found-price-panel{margin-top:clamp(5px,1.5dvh,18px);background:linear-gradient(135deg,#e6f3ff,#cfe5ff);border-radius:18px;padding:clamp(10px,2.3dvh,28px) 8px}
+.found-price{font-size:clamp(40px,5.3vw,100px);line-height:1.1;font-weight:950;color:#1249d5;white-space:nowrap}
+@media(orientation:landscape) and (max-height:650px){
+ .found-layout{height:83dvh;max-height:83dvh;grid-template-columns:34% 66%}
+ .found-info{gap:clamp(3px,1dvh,9px);padding:9px 14px}
+ .found-name{font-size:clamp(21px,3.1vw,44px)}
+ .found-price{font-size:clamp(38px,5vw,75px)}
+ .found-price-panel{padding:8px}
 }
 </style>"""
 
@@ -632,6 +575,68 @@ def catalog():
 
     return pd.DataFrame(rows, columns=["barcode", "name", "price"])
 
+
+
+# Fotografías: primero las cargadas manualmente en Storage; después catálogo público.
+# Las respuestas se almacenan en caché para no repetir búsquedas por escaneo.
+@st.cache_data(ttl=86400, show_spinner=False)
+def imagen_producto(barcode):
+    code = str(barcode).strip()
+    if not code.isdigit() or len(code) < 8 or len(code) > 14:
+        return None
+    if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
+        try:
+            r = requests.get(
+                f"{SUPABASE_URL}/storage/v1/object/imagenes-productos/{code}.png",
+                headers={"apikey": SUPABASE_SERVICE_ROLE_KEY,
+                         "Authorization": "Bearer " + SUPABASE_SERVICE_ROLE_KEY},
+                timeout=1.8)
+            if r.ok and len(r.content) < 3_000_000:
+                with Image.open(BytesIO(r.content)) as img:
+                    img.verify()
+                return r.content
+        except (requests.RequestException, OSError, ValueError):
+            pass
+    # Open Food Facts solo cuando el código devuelto coincide exactamente.
+    try:
+        r = requests.get(
+            f"https://world.openfoodfacts.org/api/v2/product/{code}.json",
+            params={"fields": "code,image_front_url,image_url"},
+            headers={"User-Agent": "WilPOSPriceChecker/1.0 (product image lookup)"},
+            timeout=2.0)
+        if not r.ok:
+            return None
+        data = r.json()
+        prod = data.get("product") or {}
+        if str(prod.get("code", "")) != code:
+            return None
+        url = prod.get("image_front_url") or prod.get("image_url")
+        if not isinstance(url, str) or not url.startswith("https://"):
+            return None
+        photo = requests.get(url, timeout=2.0)
+        if photo.ok and len(photo.content) < 3_000_000:
+            with Image.open(BytesIO(photo.content)) as img:
+                img.verify()
+            return photo.content
+    except (requests.RequestException, OSError, ValueError, TypeError):
+        pass
+    return None
+
+
+def foto_en_html(raw):
+    if raw:
+        try:
+            with Image.open(BytesIO(raw)) as original:
+                imagen = ImageOps.contain(original.convert("RGB"), (460, 460))
+                output = BytesIO()
+                imagen.save(output, format="JPEG", quality=82)
+            encoded = base64.b64encode(output.getvalue()).decode("ascii")
+            return f'<img class="found-photo" alt="Fotografía del producto" src="data:image/jpeg;base64,{encoded}">'
+        except (OSError, ValueError):
+            pass
+    return ('<div class="found-photo-placeholder" aria-label="Imagen no disponible">'
+            '<span style="font-size:clamp(46px,10vh,85px)">▣</span>'
+            '<span>IMAGEN NO DISPONIBLE</span></div>')
 
 for key, default in (
     ("search_input", ""),
@@ -768,18 +773,18 @@ def verificador():
         barcode = html.escape(str(product["barcode"]))
         price = float(product["price"])
 
+        foto = foto_en_html(imagen_producto(str(product["barcode"])))
         st.markdown(
-            '<div class="product-card result-card">'
-            '<div class="result-info">'
-            '<div class="product-label">PRODUCTO</div>'
-            f'<div class="product-name">{name}</div>'
-            f'<div class="product-code">Código: {barcode}</div>'
-            '</div>'
-            '<div class="result-price-panel">'
-            '<div class="price-label">PRECIO DE VENTA</div>'
-            f'<div class="product-price">RD$ {price:,.2f}</div>'
-            '</div>'
-            '</div>',
+            '<div class="found-layout">'
+            f'<div class="found-photo-panel">{foto}</div>'
+            '<div class="found-info">'
+            '<div class="found-caption">PRODUCTO</div>'
+            f'<div class="found-name">{name}</div>'
+            f'<div class="found-code">Código: {barcode}</div>'
+            '<div class="found-price-panel">'
+            '<div class="found-price-caption">PRECIO DE VENTA</div>'
+            f'<div class="found-price">RD$ {price:,.2f}</div>'
+            '</div></div></div>',
             unsafe_allow_html=True,
         )
 
