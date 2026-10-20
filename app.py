@@ -225,18 +225,35 @@ if user["username"].strip().lower() == "consulta" and (solicitar_salida or st.se
         with st.form("formulario_credenciales_admin_para_salir", clear_on_submit=False):
             clave_administrador = st.text_input("Contraseña del administrador", type="password", key="salida_clave_admin")
             confirmar_salida = st.form_submit_button("Confirmar salida", use_container_width=True)
-        if confirmar_salida:
+            iniciar_admin = st.form_submit_button("Iniciar sesión como administrador", use_container_width=True)
+        if confirmar_salida or iniciar_admin:
             try:
                 administrador = get_user(nombre_admin) if nombre_admin.lower() == "admin" else None
                 valido_admin = bool(administrador and administrador.get("active")
                                     and verificar(clave_administrador, administrador["password_hash"]))
             except (RuntimeError, ValueError, TypeError, KeyError):
+                administrador = None
                 valido_admin = False
             if valido_admin:
                 st.session_state.pop("inicio_autorizacion_admin", None)
-                _cerrar_sesion()
+                st.session_state.autorizar_salida_consulta = False
+                st.session_state.pop("salida_usuario_admin", None)
+                st.session_state.pop("salida_clave_admin", None)
+                if "salir" in st.query_params:
+                    del st.query_params["salir"]
+                if iniciar_admin:
+                    # Cambiar la sesión actual por la del administrador, sin recordarla.
+                    st.session_state.usuario_id = administrador["id"]
+                    st.session_state.logout_pendiente = False
+                    try:
+                        cookies.remove(COOKIE_NAME)
+                    except Exception:
+                        pass
+                    st.rerun(scope="app")
+                else:
+                    _cerrar_sesion()
             else:
-                st.error("Usuario o contraseña del administrador incorrectos. No se ha cerrado la sesión.")
+                st.error("Usuario o contraseña del administrador incorrectos. La sesión no ha cambiado.")
         if st.button("Cancelar y volver a Consulta de Precios", key="cancelar_salida_consulta"):
             st.session_state.autorizar_salida_consulta = False
             st.session_state.pop("inicio_autorizacion_admin", None)
