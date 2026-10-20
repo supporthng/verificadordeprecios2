@@ -197,18 +197,20 @@ habilitadas = [st.Page(path, title=title, icon=icon)
                 for perm, path, title, icon in config if allowed(user, perm)]
 if habilitadas:
     pages["Configuración"] = habilitadas
-# Menú expandible en la página, independiente de los permisos de configuración.
-with st.expander("☰ Menú / Mi cuenta", expanded=False):
-    st.caption("Sesión: " + user["username"])
-    if st.button("🏷️ Consulta de Precios", key="menu_consulta", use_container_width=True):
-        st.switch_page(pages["Principal"][0])
-    if habilitadas:
-        st.markdown("**Configuración**")
-        for i, pagina in enumerate(habilitadas):
-            if st.button(pagina.title, key=f"menu_config_{i}", use_container_width=True):
-                st.switch_page(pagina)
-    st.divider()
-    if st.button("🚪 Cerrar sesión", key="menu_cerrar_sesion", use_container_width=True):
-        _cerrar_sesion()
+with st.sidebar:
+    # Menú expandible dentro de la barra lateral; no ocupa espacio en Consulta de Precios.
+    with st.expander("☰ Menú / Mi cuenta", expanded=False):
+        st.caption("Sesión: " + user["username"])
+        if st.button("🏷️ Consulta de Precios", key="menu_consulta", use_container_width=True):
+            st.switch_page(pages["Principal"][0])
+        if habilitadas:
+            st.markdown("**Configuración**")
+            for i, pagina in enumerate(habilitadas):
+                if st.button(pagina.title, key=f"menu_config_{i}", use_container_width=True):
+                    st.switch_page(pagina)
+        st.divider()
+        if st.button("🚪 Cerrar sesión", key="menu_cerrar_sesion", use_container_width=True):
+            _cerrar_sesion()
+
 
 st.navigation(pages, position="sidebar").run()
