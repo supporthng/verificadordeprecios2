@@ -665,18 +665,6 @@ def verificador():
             '</div>',
             unsafe_allow_html=True,
         )
-    elif st.session_state.not_found:
-        barcode = html.escape(str(st.session_state.get("last_searched_barcode", "")))
-        st.markdown(
-            '<div class="product-card">'
-            '<div class="product-label">RESULTADO DE LA CONSULTA</div>'
-            '<div class="not-found-name">PRODUCTO NO ENCONTRADO</div>'
-            f'<div class="product-code">Código: {barcode}</div>'
-            '<div class="price-label">VERIFIQUE EL CÓDIGO DE BARRAS</div>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-
     else:
         st.markdown(
             '<div class="main-header">'
@@ -694,8 +682,15 @@ def verificador():
         </div>
         """, unsafe_allow_html=True)
 
+        # Conservar exactamente la misma pantalla de espera si no se encuentra
+        # el producto; solo cambia el mensaje principal durante 3 segundos.
+        titulo_escaneo = (
+            "PRODUCTO NO ENCONTRADO"
+            if st.session_state.not_found
+            else "ESCANEA TU CÓDIGO AQUÍ"
+        )
         st.markdown(
-            '<div class="scan-title">ESCANEA TU CÓDIGO AQUÍ</div>'
+            f'<div class="scan-title">{titulo_escaneo}</div>'
             '<div class="scan-hint">El precio se mostrará automáticamente</div>',
             unsafe_allow_html=True,
         )
