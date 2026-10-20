@@ -141,57 +141,72 @@ if selected:
     st.write('**Puerto:**', selected.get('selected_port') or '—')
     st.write('**Motor:**', selected.get('selected_engine') or '—')
     st.write('**Base de datos:**', selected.get('selected_database') or '—')
-    # Prueba real, asíncrona: Streamlit solicita al conector Windows abrir la BD.
+    # Reutiliza el canal de catálogo que ya usa Consulta de Base de Datos.
+    # No emplear external_metadata_jobs: su restricción kind no acepta 'connection'.
     if st.button('Probar conexión', type='primary', key='test_sql_connection'):
         try:
-            if selected.get('selected_engine') != 'SQL Server':
-                st.warning('La prueba SQL está implementada por ahora solo para SQL Server.')
-            elif not selected.get('selected_database'):
-                st.error('Selecciona primero una base de datos en el asistente.')
+            response = requests.get(URL + '/rest/v1/external_price_sources',
+                params={'select': 'id,name,engine,host,port,database,enabled',
+                        'enabled': 'eq.true'}, headers=HEADERS, timeout=15)
+            response.raise_for_status()
+            matches = [row for row in response.json()
+                       if str(row.get('engine', '')).casefold() == str(selected.get('selected_engine', '')).casefold()
+                       and str(row.get('host', '')).strip().casefold() == str(selected.get('selected_host', '')).strip().casefold()
+                       and str(row.get('port', '')) == str(selected.get('selected_port', ''))
+                       and str(row.get('database', '')).strip().casefold() == str(selected.get('selected_database', '')).strip().casefold()]
+            if not matches:
+                st.warning('La base seleccionada en Windows aún no tiene una fuente de productos configurada y habilitada. '
+                           'Configura su tabla y columnas antes de realizar esta prueba.')
+            elif len(matches) > 1:
+                st.warning('Hay varias fuentes configuradas para esta base de datos. '
+                           'Elige cuál deseas probar desde Consulta de Base de Datos.')
             else:
                 job = {
-                    'kind': 'connection',
-                    'host': selected['selected_host'],
-                    'port': int(selected['selected_port']),
-                    'database': selected['selected_database'],
+                    'configuration_id': matches[0]['id'],
+                    'page_number': 1,
+                    'page_size': 1,
+                    'search_term': '',
                     'status': 'pending',
-                    'expires_at': (datetime.now(timezone.utc) + timedelta(minutes=2)).isoformat(),
+                    'expires_at': (datetime.now(timezone.utc) + timedelta(minutes=3)).isoformat(),
                 }
-                response = requests.post(URL + '/rest/v1/external_metadata_jobs',
+                response = requests.post(URL + '/rest/v1/external_catalog_jobs',
                     json=job, headers=HEADERS, timeout=15)
                 response.raise_for_status()
                 st.session_state.lan_test_job_id = response.json()[0]['id']
                 st.session_state.lan_test_started = datetime.now(timezone.utc)
-        except (requests.RequestException, ValueError, KeyError, IndexError) as exc:
-            st.error('No se pudo iniciar la prueba de conexión.')
-            st.caption(type(exc).__name__)
+                st.info('Prueba enviada al conector Windows. Esperando resultado…')
+        except requests.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else '?'
+            st.error(f'No se pudo crear la prueba en Supabase (HTTP {status}).')
+            st.caption('Verifica que exista external_catalog_jobs y que el conector Windows esté actualizado.')
+        except (requests.RequestException, ValueError, KeyError, IndexError, TypeError) as exc:
+            st.error('No se pudo iniciar la prueba de conexión: ' + type(exc).__name__)
 
     @st.fragment(run_every='2s')
     def verificar_conexion_sql():
         job_id = st.session_state.get('lan_test_job_id')
         if not job_id:
             return
-        if (datetime.now(timezone.utc) - st.session_state.get(
-                'lan_test_started', datetime.now(timezone.utc))).total_seconds() > 120:
+        started = st.session_state.get('lan_test_started', datetime.now(timezone.utc))
+        if (datetime.now(timezone.utc) - started).total_seconds() > 180:
             st.session_state.pop('lan_test_job_id', None)
             st.error('La prueba venció sin respuesta del conector Windows.')
             return
         try:
-            response = requests.get(URL + '/rest/v1/external_metadata_jobs',
-                params={'id': 'eq.' + job_id,
-                        'select': 'status,result,error_message'},
+            response = requests.get(URL + '/rest/v1/external_catalog_jobs',
+                params={'id': 'eq.' + str(job_id), 'select': 'status,result,error_message'},
                 headers=HEADERS, timeout=15)
             response.raise_for_status()
             rows = response.json()
             if not rows:
-                st.error('La solicitud de prueba no existe.')
+                st.error('No se encontró la solicitud de prueba.')
                 st.session_state.pop('lan_test_job_id', None)
             elif rows[0]['status'] == 'done':
-                st.success('Conexión activa: SQL Server respondió y se pudo consultar la base de datos.')
-                st.caption('Prueba de solo lectura, sin modificar registros.')
+                st.success('Conexión comprobada: el conector Windows consultó correctamente la base de datos.')
+                st.caption('Prueba de solo lectura, sin modificar productos.')
                 st.session_state.pop('lan_test_job_id', None)
             elif rows[0]['status'] == 'error':
-                st.error('Conexión fallida: ' + str(rows[0].get('error_message') or 'Error no especificado'))
+                st.error('Error del conector: ' + str(rows[0].get('error_message') or 'No especificado'))
                 st.session_state.pop('lan_test_job_id', None)
             else:
                 st.info('Comprobando conexión real desde Windows…')
