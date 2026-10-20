@@ -153,10 +153,13 @@ def _cerrar_sesion():
         pass
     st.rerun()
 
-with st.sidebar:
-    st.caption("Sesión: " + user["username"])
-    if st.button("🚪 Cerrar sesión", key="sidebar_logout"):
-        _cerrar_sesion()
+# La cuenta exclusiva de consulta no necesita navegación lateral.
+es_solo_consulta = user["username"].strip().lower() == "consulta"
+if not es_solo_consulta:
+    with st.sidebar:
+        st.caption("Sesión: " + user["username"])
+        if st.button("🚪 Cerrar sesión", key="sidebar_logout"):
+            _cerrar_sesion()
 
 if user and user["must_change_password"]:
     st.title("Cambio obligatorio de contraseña")
@@ -197,36 +200,25 @@ habilitadas = [st.Page(path, title=title, icon=icon)
                 for perm, path, title, icon in config if allowed(user, perm)]
 if habilitadas:
     pages["Configuración"] = habilitadas
-# Al entrar como usuario de solo consulta, cerrar una vez la barra lateral.
-# El marcador vive en el documento del navegador: no se repite en cada rerun
-# y permite que el usuario vuelva a abrir el menú manualmente.
-if user["username"].strip().lower() == "consulta":
-    st.html(r"""
-    <script>
-    (() => {
-      const doc = window.parent.document;
-      const marker = 'data-consulta-sidebar-inicializada';
-      if (doc.documentElement.hasAttribute(marker)) return;
-      doc.documentElement.setAttribute(marker, '1');
-      let intentos = 0;
-      function cerrarInicialmente() {
-        const sidebar = doc.querySelector('section[data-testid="stSidebar"]');
-        if (!sidebar) {
-          if (++intentos < 25) setTimeout(cerrarInicialmente, 120);
-          return;
-        }
-        const abierta = sidebar.getAttribute('aria-expanded') === 'true' ||
-          sidebar.getAttribute('data-expanded') === 'true' ||
-          (sidebar.getBoundingClientRect().width > 200 &&
-           getComputedStyle(sidebar).transform === 'none');
-        if (!abierta) return;
-        const boton = sidebar.querySelector('[data-testid="stSidebarCollapseButton"] button, button[data-testid="stSidebarCollapseButton"], button[aria-label="Close sidebar"], button[aria-label="Cerrar barra lateral"]');
-        if (boton) boton.click();
-        else if (++intentos < 25) setTimeout(cerrarInicialmente, 120);
-      }
-      setTimeout(cerrarInicialmente, 100);
-    })();
-    </script>
-    """)
+if es_solo_consulta:
+    # Ocultar la barra por completo, incluso si el navegador recuerda que estaba abierta.
+    # No se modifica el lector ni el script de enfoque de consulta_precios.py.
+    st.markdown("""
+    <style>
+      [data-testid="stSidebar"],
+      [data-testid="collapsedControl"],
+      [data-testid="stSidebarCollapsedControl"],
+      [data-testid="stSidebarCollapseButton"] { display: none !important; }
+      [data-testid="stAppViewContainer"] { margin-left: 0 !important; }
+    </style>
+    """, unsafe_allow_html=True)
+    _, zona_salir = st.columns([12, 1.5])
+    with zona_salir:
+        if st.button("🚪 Salir", key="consulta_logout", help="Cerrar sesión"):
+            _cerrar_sesion()
+    posicion_navegacion = "hidden"
+else:
+    posicion_navegacion = "sidebar"
 
-st.navigation(pages, position="sidebar").run()
+# Ejecutar el navegador exactamente una vez.
+st.navigation(pages, position=posicion_navegacion).run()
