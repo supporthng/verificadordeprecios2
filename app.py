@@ -60,11 +60,13 @@ def _recover(token):
         return None
 
 st.session_state.setdefault("usuario_id", None)
+# Impide que una cookie antigua reactive la sesión inmediatamente después de salir.
+st.session_state.setdefault("logout_pendiente", False)
 st.session_state.setdefault("fallos_login", 0)
 st.session_state.setdefault("bloqueo_hasta", 0.0)
 
 # Recuperar sesión al refrescar la página o reabrir el navegador.
-if not st.session_state.usuario_id:
+if not st.session_state.usuario_id and not st.session_state.logout_pendiente:
     token = cookies.get(COOKIE_NAME)
     if token:
         restored_id = _recover(token)
@@ -134,6 +136,7 @@ if not user:
                     cuenta = None
                 if valido:
                     st.session_state.usuario_id = cuenta["id"]
+                    st.session_state.logout_pendiente = False
                     cookies.set(COOKIE_NAME, _token(cuenta), max_age=COOKIE_SECONDS)
                     st.session_state.fallos_login = 0
                     st.rerun()
@@ -146,6 +149,8 @@ if not user:
     st.stop()
 
 def _cerrar_sesion():
+    # Bloquear recuperación desde la cookie durante el cambio a login.
+    st.session_state.logout_pendiente = True
     st.session_state.usuario_id = None
     try:
         cookies.remove(COOKIE_NAME)
@@ -158,8 +163,7 @@ es_solo_consulta = user["username"].strip().lower() == "consulta"
 if not es_solo_consulta:
     with st.sidebar:
         st.caption("Sesión: " + user["username"])
-        if st.button("🚪 Cerrar sesión", key="sidebar_logout"):
-            _cerrar_sesion()
+        st.button("🚪 Cerrar sesión", key="sidebar_logout", on_click=_cerrar_sesion)
 
 if user and user["must_change_password"]:
     st.title("Cambio obligatorio de contraseña")
@@ -214,8 +218,7 @@ if es_solo_consulta:
     """, unsafe_allow_html=True)
     _, zona_salir = st.columns([12, 1.5])
     with zona_salir:
-        if st.button("🚪 Salir", key="consulta_logout", help="Cerrar sesión"):
-            _cerrar_sesion()
+        st.button("🚪 Salir", key="consulta_logout", help="Volver a iniciar sesión", on_click=_cerrar_sesion)
     posicion_navegacion = "hidden"
 else:
     posicion_navegacion = "sidebar"
