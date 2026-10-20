@@ -3,3 +3,4 @@ pandas
 requests
 openpyxl
 streamlit-cookies-controller
+google-auth>=2.0,<3

@@ -334,6 +334,7 @@ config = [
     ("cargar_archivo", "pages/1_Administracion.py", "Cargar Archivo Local", "📁"),
     ("consultar_base", "pages/4_Listado_Productos.py", "Consulta de Base de Datos", "📋"),
     ("fuentes", "pages/2_Fuentes_de_datos.py", "Fuentes de Datos", "🔌"),
+    ("configurar", "pages/7_Google_Drive.py", "Google Drive / Sheets", "☁️"),
     ("configurar", "pages/3_Consulta_Bases_de_Datos.py", "Configurar Consulta", "⚙️"),
     ("logo", "pages/3_Logo_del_negocio.py", "Logo del Negocio", "🖼️"),
     ("usuarios", "pages/5_Administrador_Usuarios.py", "Administrador de Usuarios", "👥"),

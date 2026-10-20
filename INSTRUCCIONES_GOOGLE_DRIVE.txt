@@ -1,0 +1,31 @@
+ACTUALIZACIÓN: GOOGLE DRIVE + GOOGLE SHEETS
+
+Archivos para colocar en el repositorio:
+- app.py (añade la página Google; mantiene el resto del código)
+- consulta_precios.py (añade modo cloud; mantiene el foco y diseño)
+- google_drive_source.py (nuevo, en raíz)
+- pages/7_Google_Drive.py (nuevo)
+- requirements.txt (agrega google-auth)
+- INSTALAR_GOOGLE_DRIVE.sql (ejecutar en SQL Editor de Supabase)
+
+PASOS:
+1. Guarda una copia del repositorio antes de reemplazar archivos.
+2. Ejecuta INSTALAR_GOOGLE_DRIVE.sql en Supabase.
+3. Sube los archivos a GitHub en sus rutas indicadas.
+4. Crea una cuenta de servicio de Google Cloud con Google Drive API y Google Sheets API habilitadas.
+5. En Streamlit Secrets añade GOOGLE_SERVICE_ACCOUNT como cadena JSON completa de la clave de esa cuenta de servicio.
+   Ejemplo de sintaxis TOML: GOOGLE_SERVICE_ACCOUNT = '''{"type":"service_account", ...}'''
+   NO subas el JSON a GitHub.
+6. Comparte el Excel de Drive o Google Sheet con el correo de la cuenta de servicio como Lector.
+7. En Administración > Google Drive / Sheets, pega el enlace, selecciona el tipo, lee el archivo,
+   elige las columnas y pulsa Guardar y activar.
+8. Prueba un código existente y uno inexistente. La caché dura hasta 5 minutos.
+   Actualizar ahora limpia la caché; no es una sincronización en segundo plano.
+
+IMPORTANTE:
+- Google Drive/Sheets se lee directamente al consultar (con caché de 5 minutos); no modifica
+  la tabla products de Supabase.
+- El botón Volver a Supabase reactiva la fuente local. Para una base externa, activa
+  la fuente externa según la configuración existente.
+- Requiere acceso de red desde el servidor Streamlit a las APIs de Google.
+- No probado contra credenciales reales; pruebas locales: compilación Python.
