@@ -11,6 +11,7 @@ import streamlit as st
 from shared import (
     catalog,
     parse_excel,
+    normalize_header,
     publish,
     secret,
     supabase_url,
@@ -506,7 +507,48 @@ file = st.file_uploader(
 if file is not None:
 
     try:
-        incoming = parse_excel(file)
+        # Mostrar las columnas reales del Excel antes de interpretar productos.
+        encabezados = pd.read_excel(file, nrows=0, engine="openpyxl")
+        columnas = list(encabezados.columns)
+        if len(columnas) < 3:
+            raise ValueError("El archivo debe contener al menos tres columnas.")
+
+        def sugerir(opciones, reserva):
+            for i, nombre in enumerate(columnas):
+                if normalize_header(nombre) in opciones:
+                    return i
+            return min(reserva, len(columnas) - 1)
+
+        st.markdown("### 🔗 Relacionar columnas del Excel")
+        st.caption("Selecciona de qué columna se obtendrá cada dato. No es necesario cambiar los encabezados del archivo.")
+        col_codigo, col_nombre, col_precio = st.columns(3)
+        with col_codigo:
+            codigo_excel = st.selectbox(
+                "Código de barras", columnas,
+                index=sugerir({"codigobarra", "codigobarras", "codigo", "barcode", "ean", "upc", "sku"}, 0),
+                key=f"excel_col_codigo_{file.name}_{file.size}",
+            )
+        with col_nombre:
+            nombre_excel = st.selectbox(
+                "Nombre / descripción", columnas,
+                index=sugerir({"nombre", "descripcion", "producto", "articulo", "detalle", "description"}, 1),
+                key=f"excel_col_nombre_{file.name}_{file.size}",
+            )
+        with col_precio:
+            precio_excel = st.selectbox(
+                "Precio de venta", columnas,
+                index=sugerir({"precioventa", "precio", "preciofinal", "pvp", "price", "venta"}, 2),
+                key=f"excel_col_precio_{file.name}_{file.size}",
+            )
+        if len({codigo_excel, nombre_excel, precio_excel}) != 3:
+            st.warning("Selecciona una columna diferente para cada campo.")
+            st.stop()
+
+        incoming = parse_excel(file, mapping={
+            "barcode": codigo_excel,
+            "name": nombre_excel,
+            "price": precio_excel,
+        })
 
         st.success(
             f"{len(incoming):,} productos válidos "
