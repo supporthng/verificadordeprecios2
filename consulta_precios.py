@@ -8,6 +8,7 @@ from pathlib import Path
 import pandas as pd
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 
 
 
@@ -507,34 +508,40 @@ def verificador():
                 placeholder="Escanea o escribe el código",
             )
 
-            # st.html inserta el script en el documento de la app, no en un iframe.
-            # El iframe de components.html no podia controlar el foco de forma fiable.
-            st.html(r"""
+            # El componente se ejecuta dentro de un iframe del mismo origen y
+            # localiza el input en el documento padre de Streamlit.
+            # No roba el foco si el usuario está usando un control del menú.
+            components.html(r"""
 <script>
 (() => {
+  const parentDoc = window.parent.document;
   const selector = 'input[placeholder="Escanea o escribe el código"]';
-  const focusInput = () => {
-    const el = document.querySelector(selector);
-    if (!el) return false;
-    const active = document.activeElement;
-    const isOtherControl = active && active !== document.body &&
-      active !== document.documentElement && active !== el &&
-      (active.matches('input,textarea,select,button,a,[contenteditable="true"]') ||
-       active.closest('[role="dialog"], [data-testid="stSidebar"]'));
-    if (isOtherControl) return true;
-    el.focus({preventScroll:true});
-    return document.activeElement === el;
-  };
-  // Esperar a que Streamlit termine de montar el campo tras F5.
-  let tries = 0;
-  const timer = setInterval(() => {
-    tries++;
-    if (focusInput() || tries > 60) clearInterval(timer);
-  }, 100);
-  requestAnimationFrame(focusInput);
+  let attempts = 0;
+  function focusScanner() {
+    const field = parentDoc.querySelector(selector);
+    if (!field || !field.isConnected) return false;
+    const active = parentDoc.activeElement;
+    if (active && active !== field && active !== parentDoc.body &&
+        active !== parentDoc.documentElement &&
+        active.matches('input,textarea,select,[contenteditable="true"]')) return true;
+    try { field.focus({preventScroll:true}); } catch(e) { field.focus(); }
+    return parentDoc.activeElement === field;
+  }
+  function tryFocus() {
+    attempts++;
+    if (focusScanner() || attempts >= 100) clearInterval(timer);
+  }
+  const timer = setInterval(tryFocus, 100);
+  setTimeout(tryFocus, 0);
+  // En montajes tardíos de Streamlit el input aparece después del iframe.
+  const observer = new MutationObserver(() => {
+    if (focusScanner()) observer.disconnect();
+  });
+  observer.observe(parentDoc.body, {childList:true, subtree:true});
+  setTimeout(() => observer.disconnect(), 12000);
 })();
 </script>
-""", unsafe_allow_javascript=True)
+""", height=0, scrolling=False)
 
 
         logo = cargar_logo_negocio()
