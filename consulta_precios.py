@@ -3,20 +3,10 @@ from io import BytesIO
 from PIL import Image, ImageOps
 from datetime import datetime, timedelta, timezone
 import time
-from pathlib import Path
-import streamlit.components.v1 as components
 
 import pandas as pd
 import requests
 import streamlit as st
-
-# Campo HTML de la prueba, comunicado con Streamlit mediante un componente local.
-# Si faltan los archivos del componente, conserva el textbox habitual.
-LECTOR_HTML_DIR = Path(__file__).resolve().parent / "lector_html"
-lector_html = (
-    components.declare_component("lector_html_autofoco_v1", path=str(LECTOR_HTML_DIR))
-    if (LECTOR_HTML_DIR / "index.html").is_file() else None
-)
 
 SUPABASE_URL = str(st.secrets.get("SUPABASE_URL", "")).strip().rstrip("/")
 SUPABASE_ANON_KEY = str(st.secrets.get("SUPABASE_ANON_KEY", "")).strip()
@@ -506,24 +496,13 @@ def verificador():
 
         lado_izquierdo, campo_central, lado_derecho = st.columns([1, 2, 1])
         with campo_central:
-            if lector_html is not None:
-                lectura = lector_html(key="lector_html_precio", default=None)
-                if isinstance(lectura, dict):
-                    codigo = str(lectura.get("codigo", "")).strip()
-                    identificador = str(lectura.get("id", ""))
-                    if codigo and identificador and identificador != st.session_state.get("ultimo_id_lector_html"):
-                        st.session_state.ultimo_id_lector_html = identificador
-                        st.session_state.search_input = codigo
-                        buscar_producto()
-                        st.rerun(scope="fragment")
-            else:
-                st.text_input(
-                    "Código de barras",
-                    key="search_input",
-                    on_change=buscar_producto,
-                    label_visibility="collapsed",
-                    placeholder="Escanea o escribe el código",
-                )
+            st.text_input(
+                "Código de barras",
+                key="search_input",
+                on_change=buscar_producto,
+                label_visibility="collapsed",
+                placeholder="Escanea o escribe el código",
+            )
 
         logo = cargar_logo_negocio()
         if logo:
