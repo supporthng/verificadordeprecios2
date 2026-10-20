@@ -59,16 +59,8 @@ def _recover(token):
     except (ValueError, KeyError, TypeError, RuntimeError, OverflowError):
         return None
 
-# El enlace de salida hace una navegación real y funciona incluso cuando
-# Streamlit reconstruye la sesión o una cookie tarda en desaparecer.
-logout_por_url = str(st.query_params.get("salir", "")) == "1"
-if logout_por_url:
-    st.session_state["usuario_id"] = None
-    st.session_state["logout_pendiente"] = True
-    try:
-        cookies.remove(COOKIE_NAME)
-    except Exception:
-        pass
+# La X solicita autorización; nunca cierra sesión sin contraseña de admin.
+solicitar_salida = str(st.query_params.get("salir", "")) == "1"
 
 st.session_state.setdefault("usuario_id", None)
 # Impide que una cookie antigua reactive la sesión inmediatamente después de salir.
@@ -173,6 +165,39 @@ def _cerrar_sesion():
         pass
     st.rerun()
 
+# La X de consulta exige la contraseña de la cuenta administradora.
+# No cerrar ni invalidar la sesión hasta validar la clave en el servidor.
+if user["username"].strip().lower() == "consulta" and solicitar_salida:
+    st.markdown("""
+    <style>
+      [data-testid="stSidebar"], [data-testid="collapsedControl"],
+      [data-testid="stSidebarCollapsedControl"] {display:none!important;}
+      .block-container {max-width:580px!important; padding-top:clamp(50px,12vh,130px)!important;}
+    </style>
+    """, unsafe_allow_html=True)
+    st.title("🔐 Autorizar salida")
+    st.info("Introduce la contraseña del administrador para salir de Consulta de Precios.")
+    with st.form("autorizar_salida_consulta", clear_on_submit=False):
+        clave_administrador = st.text_input("Contraseña del administrador", type="password")
+        confirmar_salida = st.form_submit_button("Confirmar salida", use_container_width=True)
+    if confirmar_salida:
+        try:
+            administrador = get_user("admin")
+            valido_admin = bool(
+                administrador and administrador.get("active")
+                and verificar(clave_administrador, administrador["password_hash"])
+            )
+        except (RuntimeError, ValueError, TypeError, KeyError):
+            valido_admin = False
+        if valido_admin:
+            _cerrar_sesion()
+        else:
+            st.error("Contraseña de administrador incorrecta.")
+    if st.button("Volver a Consulta de Precios", key="cancelar_salida_consulta"):
+        del st.query_params["salir"]
+        st.rerun()
+    st.stop()
+
 # La cuenta exclusiva de consulta no necesita navegación lateral.
 es_solo_consulta = user["username"].strip().lower() == "consulta"
 if not es_solo_consulta:
@@ -231,18 +256,40 @@ if es_solo_consulta:
       [data-testid="stAppViewContainer"] { margin-left: 0 !important; }
     </style>
     """, unsafe_allow_html=True)
-    # Enlace HTML: recarga la ruta y activa ?salir=1, sin depender de callbacks.
-    # Mantener el parámetro hasta el siguiente inicio de sesión válido evita
-    # que una cookie antigua reabra la sesión por accidente.
+    # Cierre de sesión como X discreta en la esquina superior izquierda.
+    # Se conserva el mecanismo de salida por URL (?salir=1).
     st.markdown("""
-    <div style="display:flex;justify-content:flex-end;margin:0 0 5px 0;">
-      <a href="?salir=1" target="_self"
-         style="display:inline-block;padding:8px 14px;border:1px solid #cbd5e1;
-                border-radius:9px;background:white;color:#172f56;
-                font-weight:650;text-decoration:none;white-space:nowrap;">
-         🚪 Salir
-      </a>
-    </div>
+    <style>
+      a.consulta-cerrar-x {
+        position: fixed !important;
+        top: 12px !important;
+        left: 16px !important;
+        z-index: 999999 !important;
+        width: 36px !important;
+        height: 36px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        border-radius: 10px !important;
+        background: rgba(255,255,255,.12) !important;
+        border: 1px solid rgba(255,255,255,.38) !important;
+        color: white !important;
+        font: 700 26px/1 Arial, sans-serif !important;
+        text-decoration: none !important;
+        box-shadow: none !important;
+      }
+      a.consulta-cerrar-x:hover,
+      a.consulta-cerrar-x:focus-visible {
+        background: rgba(255,255,255,.28) !important;
+        outline: 2px solid white !important;
+      }
+      @media(max-width:600px) {
+        a.consulta-cerrar-x { top: 9px !important; left: 10px !important; }
+      }
+    </style>
+    <a class="consulta-cerrar-x" href="?salir=1" target="_self"
+       title="Salir (requiere contraseña de administrador)"
+       aria-label="Solicitar salida">&times;</a>
     """, unsafe_allow_html=True)
     posicion_navegacion = "hidden"
 else:
