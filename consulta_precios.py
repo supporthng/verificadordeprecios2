@@ -10,11 +10,6 @@ import requests
 import streamlit as st
 import streamlit.components.v1 as components
 
-# Campo del lector controlado dentro de su propio componente (sin acceder al DOM de Streamlit).
-scanner_component = components.declare_component(
-    "lector_codigo_autofoco", path=str(Path(__file__).resolve().parent / "scanner_component")
-)
-
 
 
 SUPABASE_URL = str(st.secrets.get("SUPABASE_URL", "")).strip().rstrip("/")
@@ -498,6 +493,57 @@ def verificador():
         </div>
         """, unsafe_allow_html=True)
 
+        st.markdown(
+            '<div class="scan-title">ESCANEA TU CÓDIGO AQUÍ</div>',
+            unsafe_allow_html=True,
+        )
+
+        lado_izquierdo, campo_central, lado_derecho = st.columns([1, 2, 1])
+        with campo_central:
+            st.text_input(
+                "Código de barras",
+                key="search_input",
+                on_change=buscar_producto,
+                label_visibility="collapsed",
+                placeholder="Escanea o escribe el código",
+            )
+
+            # El componente se ejecuta dentro de un iframe del mismo origen y
+            # localiza el input en el documento padre de Streamlit.
+            # No roba el foco si el usuario está usando un control del menú.
+            components.html(r"""
+<script>
+(() => {
+  const parentDoc = window.parent.document;
+  const selector = 'input[placeholder="Escanea o escribe el código"]';
+  let attempts = 0;
+  function focusScanner() {
+    const field = parentDoc.querySelector(selector);
+    if (!field || !field.isConnected) return false;
+    const active = parentDoc.activeElement;
+    if (active && active !== field && active !== parentDoc.body &&
+        active !== parentDoc.documentElement &&
+        active.matches('input,textarea,select,[contenteditable="true"]')) return true;
+    try { field.focus({preventScroll:true}); } catch(e) { field.focus(); }
+    return parentDoc.activeElement === field;
+  }
+  function tryFocus() {
+    attempts++;
+    if (focusScanner() || attempts >= 100) clearInterval(timer);
+  }
+  const timer = setInterval(tryFocus, 100);
+  setTimeout(tryFocus, 0);
+  // En montajes tardíos de Streamlit el input aparece después del iframe.
+  const observer = new MutationObserver(() => {
+    if (focusScanner()) observer.disconnect();
+  });
+  observer.observe(parentDoc.body, {childList:true, subtree:true});
+  setTimeout(() => observer.disconnect(), 12000);
+})();
+</script>
+""", height=0, scrolling=False)
+
+
         logo = cargar_logo_negocio()
         if logo:
             # Logo en la misma columna central y ancho que la imagen del codigo de barras.
@@ -517,21 +563,6 @@ def verificador():
 
 
 
-
-# El campo del lector se monta FUERA del fragmento de actualización.
-# Así permanece visible y estable mientras se busca y se muestra el precio.
-st.markdown('<div class="scan-title">ESCANEA TU CÓDIGO AQUÍ</div>', unsafe_allow_html=True)
-_, columna_lector, _ = st.columns([1, 2, 1])
-with columna_lector:
-    lectura = scanner_component(key="lector_codigo_autofoco", default=None)
-
-if isinstance(lectura, dict):
-    identificador = str(lectura.get("id", ""))
-    codigo = str(lectura.get("codigo", "")).strip()
-    if codigo and identificador and identificador != st.session_state.get("ultimo_scan_componente"):
-        st.session_state.ultimo_scan_componente = identificador
-        st.session_state.search_input = codigo
-        buscar_producto()
 
 try:
     verificador()
