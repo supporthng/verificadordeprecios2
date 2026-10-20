@@ -527,77 +527,44 @@ def verificador():
 
 
 
-# Captura de lectores USB/Bluetooth que actuan como teclado (HID).
-# Se instala fuera del fragmento para seguir escuchando mientras se muestra el precio.
-def _consulta_lector_global():
-    codigo = str(st.session_state.get("lector_global", "")).strip()
-    if codigo:
-        st.session_state.search_input = codigo
-        buscar_producto()
-
-st.markdown("""
-<style>
-/* Oculto visualmente, pero sigue siendo un input real y editable para Streamlit. */
-div[data-testid="stTextInput"]:has(input[aria-label="Lector global oculto"]) {
-    position: absolute !important;
-    left: -10000px !important;
-    width: 1px !important;
-    height: 1px !important;
-    overflow: hidden !important;
-}
-</style>
-""", unsafe_allow_html=True)
-st.text_input("Lector global oculto", key="lector_global", on_change=_consulta_lector_global,
-              label_visibility="collapsed")
-
-# Captura el texto completo del lector HID incluso cuando otro elemento tiene el foco.
-# Un lector debe enviar caracteres seguidos de Enter; no se interceptan teclas de
-# navegación ni combinaciones con Ctrl/Alt/Meta.
+# Mantener el foco en el campo visible para lectores que actuan como teclado.
+# No se usa un campo invisible ni captura global de teclas.
 components.html(r"""
 <script>
 (function () {
   try {
-    const win = window.parent;
-    const doc = win.document;
-    // Sustituir el manejador en cada rerun para evitar referencias obsoletas.
-    if (win.__wilposScannerHandler) {
-      doc.removeEventListener('keydown', win.__wilposScannerHandler, true);
+    const doc = window.parent.document;
+    const selector = 'input[aria-label="Código de barras"]';
+    if (window.parent.__precioFocusCleanup) window.parent.__precioFocusCleanup();
+    let pending;
+    const isInteractive = el => !!(el && el.closest('button, a, [role="button"], [role="menu"], [role="dialog"], [data-testid="stSidebar"], input:not([aria-label="Código de barras"]), textarea, select'));
+    function focusInput() {
+      const input = doc.querySelector(selector);
+      if (!input || input.disabled || doc.hidden) return;
+      const active = doc.activeElement;
+      // No interrumpir botones, menú de navegación, ni cerrar sesión.
+      if (active && active !== doc.body && active !== input && isInteractive(active)) return;
+      if (active !== input) input.focus({preventScroll: true});
     }
-    let buffer = '', last = 0, first = 0;
-    // No roba el foco de botones, menú, ni campos de configuración.
-    function handleKey(e) {
-      if (e.ctrlKey || e.altKey || e.metaKey || e.isComposing || e.repeat) return;
-      const now = Date.now();
-      if (e.key === 'Enter') {
-        const scanned = buffer;
-        const duration = now - first;
-        const pause = now - last;
-        buffer = ''; last = 0; first = 0;
-        if (scanned.length < 4 || pause > 500 || duration > Math.max(900, scanned.length * 170)) return;
-        const target = doc.querySelector('input[aria-label="Lector global oculto"]');
-        if (!target) return;
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        // Usar el setter nativo permite que React/Streamlit detecte el cambio.
-        const setter = Object.getOwnPropertyDescriptor(win.HTMLInputElement.prototype, 'value').set;
-        // Foco antes de modificar el valor: React debe registrar el cambio.
-        target.focus({preventScroll:true});
-        setter.call(target, scanned);
-        target.dispatchEvent(new win.InputEvent('input', {bubbles:true, inputType:'insertText', data:scanned}));
-        // Al perder el foco, Streamlit confirma el valor y ejecuta on_change.
-        setTimeout(function () { target.blur(); }, 100);
-        return;
-      }
-      if (e.key.length !== 1 || !/^[0-9A-Za-z._-]$/.test(e.key)) {
-        buffer = ''; last = 0; first = 0; return;
-      }
-      if (now - last > 300) { buffer = ''; first = now; }
-      buffer += e.key;
-      last = now;
+    function schedule() { clearTimeout(pending); pending = setTimeout(focusInput, 90); }
+    function onClick(event) {
+      if (!isInteractive(event.target)) schedule();
     }
-    win.__wilposScannerHandler = handleKey;
-    doc.addEventListener('keydown', handleKey, true);
-  } catch(err) { /* Restricciones del navegador */ }
+    function onKey(event) {
+      // Si se escanea con el campo enfocado, Streamlit recibe Enter por on_change.
+      if (event.key === 'Enter' && doc.activeElement?.matches(selector)) schedule();
+    }
+    doc.addEventListener('click', onClick, true);
+    doc.addEventListener('keydown', onKey, true);
+    const observer = new MutationObserver(schedule);
+    observer.observe(doc.body, {childList:true, subtree:true});
+    window.parent.__precioFocusCleanup = () => {
+      clearTimeout(pending); observer.disconnect();
+      doc.removeEventListener('click', onClick, true);
+      doc.removeEventListener('keydown', onKey, true);
+    };
+    schedule();
+  } catch (e) { /* El navegador puede restringir acceso al marco principal. */ }
 })();
 </script>
 """, height=0)
