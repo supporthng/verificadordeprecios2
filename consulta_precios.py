@@ -8,6 +8,38 @@ import inspect
 import pandas as pd
 import requests
 import streamlit as st
+from auth_usuarios import current_user
+
+# Cerrar una sola vez la barra lateral al entrar con el usuario consulta.
+# No se oculta con CSS: el usuario puede volver a abrirla para cerrar sesion.
+CERRAR_SIDEBAR_JS = r"""
+<script>
+(() => {
+  if (window.__consultaSidebarCierreIntentado) return;
+  window.__consultaSidebarCierreIntentado = true;
+  let intentos = 0;
+  const intentar = () => {
+    if (++intentos > 30) return;
+    const sidebar = document.querySelector('[data-testid="stSidebar"]');
+    if (!sidebar) { setTimeout(intentar, 200); return; }
+    const estado = sidebar.getAttribute('aria-expanded');
+    const colapsado = sidebar.getAttribute('data-state') === 'collapsed' ||
+      sidebar.getAttribute('aria-hidden') === 'true' ||
+      estado === 'false' ||
+      sidebar.getBoundingClientRect().width < 100;
+    if (colapsado) return;
+    const boton = sidebar.querySelector('[data-testid="stSidebarCollapseButton"] button, [data-testid="stSidebarCollapseButton"]') ||
+      document.querySelector('[data-testid="stSidebarCollapseButton"] button, [data-testid="stSidebarCollapseButton"]');
+    if (boton) {
+      boton.click();
+    } else {
+      setTimeout(intentar, 200);
+    }
+  };
+  setTimeout(intentar, 250);
+})();
+</script>
+"""
 
 # El enfoque se aplica directamente al textbox nativo de Streamlit.
 # No utiliza declare_component ni iframe: evita el RuntimeError anterior.
@@ -299,6 +331,12 @@ div[data-testid="stTextInput"] input:focus-visible {
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
+
+# Solo para la cuenta de consulta, nunca para administradores.
+_usuario_actual = current_user()
+if (_usuario_actual and str(_usuario_actual.get("username", "")).strip().lower() == "consulta"
+        and "unsafe_allow_javascript" in inspect.signature(st.html).parameters):
+    st.html(CERRAR_SIDEBAR_JS, unsafe_allow_javascript=True)
 
 
 @st.cache_data(ttl=90, show_spinner=False)
