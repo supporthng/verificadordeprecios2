@@ -8,7 +8,6 @@ from pathlib import Path
 import pandas as pd
 import requests
 import streamlit as st
-import streamlit.components.v1 as components
 
 
 
@@ -508,36 +507,34 @@ def verificador():
                 placeholder="Escanea o escribe el código",
             )
 
-            # En cada carga y reconstrucción del campo, activar el cursor del lector.
-            # Se ejecuta DESPUÉS de crear el textbox, dentro del fragmento.
-            components.html(r"""
+            # st.html inserta el script en el documento de la app, no en un iframe.
+            # El iframe de components.html no podia controlar el foco de forma fiable.
+            st.html(r"""
 <script>
 (() => {
-  try {
-    const doc = window.parent.document;
-    const selector = 'input[placeholder="Escanea o escribe el código"]';
-    let attempts = 0;
-    const focusScanner = () => {
-      const field = doc.querySelector(selector);
-      if (!field) return false;
-      const active = doc.activeElement;
-      // No interrumpir navegación, configuración ni cierre de sesión.
-      if (active && active !== doc.body && active !== doc.documentElement &&
-          active !== field && active.closest('button, a, [role="button"], [role="dialog"], [data-testid="stSidebar"], input, textarea, select')) {
-        return true;
-      }
-      try { field.focus({preventScroll:true}); } catch (_) { field.focus(); }
-      return doc.activeElement === field;
-    };
-    focusScanner();
-    const retry = window.setInterval(() => {
-      attempts += 1;
-      if (focusScanner() || attempts >= 35) window.clearInterval(retry);
-    }, 100);
-  } catch (_) { /* Restricciones del navegador */ }
+  const selector = 'input[placeholder="Escanea o escribe el código"]';
+  const focusInput = () => {
+    const el = document.querySelector(selector);
+    if (!el) return false;
+    const active = document.activeElement;
+    const isOtherControl = active && active !== document.body &&
+      active !== document.documentElement && active !== el &&
+      (active.matches('input,textarea,select,button,a,[contenteditable="true"]') ||
+       active.closest('[role="dialog"], [data-testid="stSidebar"]'));
+    if (isOtherControl) return true;
+    el.focus({preventScroll:true});
+    return document.activeElement === el;
+  };
+  // Esperar a que Streamlit termine de montar el campo tras F5.
+  let tries = 0;
+  const timer = setInterval(() => {
+    tries++;
+    if (focusInput() || tries > 60) clearInterval(timer);
+  }, 100);
+  requestAnimationFrame(focusInput);
 })();
 </script>
-""", height=0)
+""", unsafe_allow_javascript=True)
 
 
         logo = cargar_logo_negocio()
