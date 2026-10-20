@@ -456,6 +456,18 @@ CSS += """
 }
 </style>
 """
+# Solo en PRODUCTO NO ENCONTRADO: barras rojas estáticas y fondo tenue.
+CSS += """<style>
+.animated-barcode-card.barcode-not-found {background:#fff1f2 !important;}
+.animated-barcode-card.barcode-not-found .animated-bars {
+  background:repeating-linear-gradient(90deg,#b91c1c 0px,#b91c1c 3px,transparent 3px,transparent 6px,#dc2626 6px,#dc2626 8px,transparent 8px,transparent 12px) !important;
+  animation:none !important;
+}
+.animated-barcode-card.barcode-not-found .animated-scan-line,
+.animated-barcode-card.barcode-not-found .animated-bars::before,
+.animated-barcode-card.barcode-not-found .animated-bars::after {display:none !important;animation:none !important;}
+.scan-title.scan-title-not-found {color:#b91c1c !important;font-weight:800 !important;}
+</style>"""
 st.markdown(CSS, unsafe_allow_html=True)
 
 
@@ -675,8 +687,11 @@ def verificador():
         )
 
         # Codigo de barras animado: solo decorativo, no altera la lectura real.
-        st.markdown("""
-        <div class="animated-barcode-card" aria-label="Escaner de codigos de barras animado">
+        # Estado de error: barras rojas inmóviles, sin línea de escaneo.
+        # Estado normal: conserva la animación original.
+        clase_error = " barcode-not-found" if st.session_state.not_found else ""
+        st.markdown(f"""
+        <div class="animated-barcode-card{clase_error}" aria-label="Código de barras decorativo">
           <div class="animated-bars"><div class="animated-scan-line"></div></div>
           <div class="animated-barcode-caption">PRECIO &nbsp;•&nbsp; RD$</div>
         </div>
@@ -690,7 +705,7 @@ def verificador():
             else "ESCANEA TU CÓDIGO AQUÍ"
         )
         st.markdown(
-            f'<div class="scan-title">{titulo_escaneo}</div>'
+            f'<div class="scan-title{" scan-title-not-found" if st.session_state.not_found else ""}">{titulo_escaneo}</div>'
             '<div class="scan-hint">El precio se mostrará automáticamente</div>',
             unsafe_allow_html=True,
         )
