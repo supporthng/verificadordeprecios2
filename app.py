@@ -59,6 +59,17 @@ def _recover(token):
     except (ValueError, KeyError, TypeError, RuntimeError, OverflowError):
         return None
 
+# El enlace de salida hace una navegación real y funciona incluso cuando
+# Streamlit reconstruye la sesión o una cookie tarda en desaparecer.
+logout_por_url = str(st.query_params.get("salir", "")) == "1"
+if logout_por_url:
+    st.session_state["usuario_id"] = None
+    st.session_state["logout_pendiente"] = True
+    try:
+        cookies.remove(COOKIE_NAME)
+    except Exception:
+        pass
+
 st.session_state.setdefault("usuario_id", None)
 # Impide que una cookie antigua reactive la sesión inmediatamente después de salir.
 st.session_state.setdefault("logout_pendiente", False)
@@ -139,6 +150,10 @@ if not user:
                     st.session_state.logout_pendiente = False
                     cookies.set(COOKIE_NAME, _token(cuenta), max_age=COOKIE_SECONDS)
                     st.session_state.fallos_login = 0
+                    st.session_state.logout_pendiente = False
+                    # Salir del modo login solamente tras autenticar correctamente.
+                    if "salir" in st.query_params:
+                        del st.query_params["salir"]
                     st.rerun()
                 else:
                     st.session_state.fallos_login += 1
@@ -216,9 +231,19 @@ if es_solo_consulta:
       [data-testid="stAppViewContainer"] { margin-left: 0 !important; }
     </style>
     """, unsafe_allow_html=True)
-    _, zona_salir = st.columns([12, 1.5])
-    with zona_salir:
-        st.button("🚪 Salir", key="consulta_logout", help="Volver a iniciar sesión", on_click=_cerrar_sesion)
+    # Enlace HTML: recarga la ruta y activa ?salir=1, sin depender de callbacks.
+    # Mantener el parámetro hasta el siguiente inicio de sesión válido evita
+    # que una cookie antigua reabra la sesión por accidente.
+    st.markdown("""
+    <div style="display:flex;justify-content:flex-end;margin:0 0 5px 0;">
+      <a href="?salir=1" target="_self"
+         style="display:inline-block;padding:8px 14px;border:1px solid #cbd5e1;
+                border-radius:9px;background:white;color:#172f56;
+                font-weight:650;text-decoration:none;white-space:nowrap;">
+         🚪 Salir
+      </a>
+    </div>
+    """, unsafe_allow_html=True)
     posicion_navegacion = "hidden"
 else:
     posicion_navegacion = "sidebar"
