@@ -564,6 +564,7 @@ components.html(r"""
       doc.removeEventListener('keydown', win.__wilposScannerHandler, true);
     }
     let buffer = '', last = 0, first = 0;
+    // No roba el foco de botones, menú, ni campos de configuración.
     function handleKey(e) {
       if (e.ctrlKey || e.altKey || e.metaKey || e.isComposing || e.repeat) return;
       const now = Date.now();
@@ -572,29 +573,25 @@ components.html(r"""
         const duration = now - first;
         const pause = now - last;
         buffer = ''; last = 0; first = 0;
-        if (scanned.length < 5 || pause > 350 || duration > Math.max(700, scanned.length * 130)) return;
+        if (scanned.length < 4 || pause > 500 || duration > Math.max(900, scanned.length * 170)) return;
         const target = doc.querySelector('input[aria-label="Lector global oculto"]');
         if (!target) return;
         e.preventDefault();
         e.stopImmediatePropagation();
         // Usar el setter nativo permite que React/Streamlit detecte el cambio.
         const setter = Object.getOwnPropertyDescriptor(win.HTMLInputElement.prototype, 'value').set;
-        setter.call(target, scanned);
-        target.dispatchEvent(new win.Event('input', { bubbles: true }));
-        target.dispatchEvent(new win.Event('change', { bubbles: true }));
-        // El commit de Streamlit se produce al perder foco o al pulsar Enter.
+        // Foco antes de modificar el valor: React debe registrar el cambio.
         target.focus({preventScroll:true});
-        setTimeout(function () {
-          target.dispatchEvent(new win.KeyboardEvent('keydown', {key:'Enter', code:'Enter', bubbles:true}));
-          target.dispatchEvent(new win.KeyboardEvent('keyup', {key:'Enter', code:'Enter', bubbles:true}));
-          target.blur();
-        }, 80);
+        setter.call(target, scanned);
+        target.dispatchEvent(new win.InputEvent('input', {bubbles:true, inputType:'insertText', data:scanned}));
+        // Al perder el foco, Streamlit confirma el valor y ejecuta on_change.
+        setTimeout(function () { target.blur(); }, 100);
         return;
       }
       if (e.key.length !== 1 || !/^[0-9A-Za-z._-]$/.test(e.key)) {
         buffer = ''; last = 0; first = 0; return;
       }
-      if (now - last > 200) { buffer = ''; first = now; }
+      if (now - last > 300) { buffer = ''; first = now; }
       buffer += e.key;
       last = now;
     }
