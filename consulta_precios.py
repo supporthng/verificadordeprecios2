@@ -514,6 +514,85 @@ CSS += """<style>
 }
 </style>"""
 
+
+# Diseño de producto encontrado: dos zonas claras y precio destacado.
+CSS += """<style>
+.product-card.result-card {
+  width: 100% !important;
+  height: auto !important;
+  min-height: 82dvh !important;
+  padding: clamp(12px, 2.5dvh, 26px) clamp(14px, 3vw, 36px) !important;
+  margin: 0 auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  align-items: stretch !important;
+  gap: clamp(10px, 2dvh, 20px) !important;
+  border-radius: 18px !important;
+  box-sizing: border-box !important;
+}
+.result-card .result-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  flex: 1 1 auto;
+  gap: clamp(5px, 1dvh, 12px);
+  min-height: 0;
+}
+.result-card .product-label {
+  font-size: clamp(13px, 1.5vw, 19px) !important;
+  font-weight: 800 !important;
+  letter-spacing: .16em !important;
+  color: #687a94 !important;
+}
+.result-card .product-name {
+  font-size: clamp(26px, 3.3vw, 51px) !important;
+  line-height: 1.12 !important;
+  font-weight: 850 !important;
+  max-width: 100% !important;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+  margin: 0 !important;
+  color: #0c315e !important;
+}
+.result-card .product-code {
+  font-size: clamp(15px, 1.55vw, 23px) !important;
+  color: #667891 !important;
+  margin: 0 !important;
+}
+.result-card .result-price-panel {
+  flex: 0 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+  background: #eaf2ff;
+  border: 1px solid #c9dcfa;
+  border-radius: 18px;
+  padding: clamp(12px, 2.4dvh, 24px) 10px;
+  text-align: center;
+}
+.result-card .price-label {
+  color: #174b91 !important;
+  font-size: clamp(14px, 1.7vw, 21px) !important;
+  font-weight: 800 !important;
+  letter-spacing: .12em !important;
+}
+.result-card .product-price {
+  font-size: clamp(54px, 7.2vw, 108px) !important;
+  font-weight: 900 !important;
+  line-height: 1.06 !important;
+  color: #164bc5 !important;
+  margin: 3px 0 0 !important;
+  overflow-wrap: anywhere;
+}
+@media (orientation: landscape) and (max-height: 650px) {
+  .product-card.result-card {min-height: 82dvh !important; padding: 10px 20px !important; gap: 8px !important;}
+  .result-card .product-name {font-size: clamp(24px, 3.2vw, 45px) !important;}
+  .result-card .product-price {font-size: clamp(49px, 6.6vw, 85px) !important;}
+  .result-card .result-price-panel {padding: 10px 8px;}
+}
+</style>"""
+
 st.markdown(CSS, unsafe_allow_html=True)
 
 
@@ -691,11 +770,15 @@ def verificador():
 
         st.markdown(
             '<div class="product-card result-card">'
+            '<div class="result-info">'
             '<div class="product-label">PRODUCTO</div>'
             f'<div class="product-name">{name}</div>'
             f'<div class="product-code">Código: {barcode}</div>'
+            '</div>'
+            '<div class="result-price-panel">'
             '<div class="price-label">PRECIO DE VENTA</div>'
             f'<div class="product-price">RD$ {price:,.2f}</div>'
+            '</div>'
             '</div>',
             unsafe_allow_html=True,
         )
