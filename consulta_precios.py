@@ -75,7 +75,7 @@ def active_source():
     mode = settings[0]["source_type"]
     if mode == "local":
         return mode, None
-    if mode == "cloud":
+    if mode == "google":
         return mode, None
     if mode != "external":
         raise RuntimeError("Origen de datos desconocido.")
@@ -640,12 +640,14 @@ def buscar_producto():
             else:
                 st.session_state.current_product = hits.iloc[0].to_dict()
             st.session_state.result_time = time.monotonic()
-        elif mode == "cloud":
-            from google_drive_source import cloud_config, products
-            cfg = cloud_config()
-            df = products(cfg["kind"], cfg["file_id"], cfg["sheet_name"],
-                          cfg["code_column"], cfg["description_column"], cfg["price_column"])
-            hits = df[df["barcode"] == query].head(1)
+        elif mode == "google":
+            from google_oauth_source import config as google_config, catalog as google_catalog
+            cfg = google_config()
+            if not cfg or not cfg.get("file_id"):
+                raise RuntimeError("Configura el archivo de Google desde Administración.")
+            df = google_catalog(cfg["kind"], cfg["file_id"], cfg["sheet_name"] or "",
+                                cfg["code_column"], cfg["name_column"], cfg["price_column"])
+            hits = df[df["barcode"].astype(str).str.strip() == query].head(1)
             if hits.empty:
                 st.session_state.not_found = True
             else:
