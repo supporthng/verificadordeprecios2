@@ -93,7 +93,29 @@ def save_token(data,old=None):
     refresh=data.get("refresh_token") or old
     if not refresh: raise RuntimeError("Google no devolvió permiso de acceso persistente. Desconecta la app en tu cuenta Google y vuelve a autorizar.")
     encrypted=cipher().encrypt(refresh.encode()).decode()
-    api("POST","google_price_source",{"on_conflict":"id"},{"id":1,"refresh_token_encrypted":encrypted})
+    url = setting("SUPABASE_URL").rstrip("/") + "/rest/v1/google_price_source"
+    key = setting("SUPABASE_SERVICE_ROLE_KEY")
+    response = requests.post(
+        url,
+        params={"on_conflict": "id"},
+        json={"id": 1, "refresh_token_encrypted": encrypted},
+        headers={
+            "apikey": key,
+            "Authorization": "Bearer " + key,
+            "Content-Type": "application/json",
+            "Prefer": "resolution=merge-duplicates,return=representation",
+        },
+        timeout=API_TIMEOUT,
+    )
+    if not response.ok:
+        try:
+            detail = response.json()
+            reason = str(detail.get("code", "")) + ": " + str(detail.get("message", ""))
+        except (ValueError, AttributeError):
+            reason = "Error de la base de datos"
+        raise RuntimeError(
+            f"Supabase no pudo guardar la conexión Google (HTTP {response.status_code}): {reason[:350]}"
+        )
 
 def connect(data):
     save_token(data)
