@@ -159,8 +159,26 @@ if not user:
       [data-testid="stForm"] { background:white; border:1px solid #e3eaf6;
           border-radius:22px; padding:22px 28px 30px;
           box-shadow:0 16px 45px rgba(27, 57, 112, .11); }
+      /* Colores explícitos: Safari iOS y temas oscuros de Streamlit */
       [data-testid="stForm"] [data-testid="stTextInput"] input {
-          background:#f9fbff; border-radius:11px; min-height:46px; }
+          background:#f9fbff !important; color:#172f56 !important;
+          -webkit-text-fill-color:#172f56 !important;
+          caret-color:#172f56 !important; border-radius:11px; min-height:46px;
+          font-size:16px !important; color-scheme:light;
+      }
+      [data-testid="stForm"] [data-testid="stTextInput"] input::placeholder {
+          color:#65758d !important; -webkit-text-fill-color:#65758d !important; opacity:1 !important;
+      }
+      [data-testid="stForm"] [data-testid="stWidgetLabel"],
+      [data-testid="stForm"] [data-testid="stWidgetLabel"] p,
+      [data-testid="stForm"] label,
+      [data-testid="stForm"] [data-testid="stCheckbox"] p,
+      [data-testid="stForm"] [data-testid="stCheckbox"] label {
+          color:#172f56 !important;
+      }
+      [data-testid="stForm"] [data-testid="stTextInput"] input:focus {
+          border-color:#2563eb !important;
+      }
       [data-testid="stForm"] button[kind="secondaryFormSubmit"] {
           background:linear-gradient(105deg,#1679ee,#265cf1); color:white;
           border:0; border-radius:11px; min-height:48px; font-weight:700;
