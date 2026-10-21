@@ -747,7 +747,7 @@ def verificador():
 
     # Los códigos inexistentes vuelven antes al lector; los productos encontrados
     # conservan el tiempo habitual para leer el precio.
-    display_seconds = 3 if st.session_state.not_found else 10
+    display_seconds = 7 if st.session_state.not_found else 10
     if started is not None and time.monotonic() - started >= display_seconds:
         st.session_state.current_product = None
         st.session_state.not_found = False
@@ -829,9 +829,14 @@ def verificador():
         )
         st.markdown(
             f'<div class="scan-title{" scan-title-not-found" if st.session_state.not_found else ""}">{titulo_escaneo}</div>'
-            '<div class="scan-hint">El precio se mostrará automáticamente</div>',
+            + ('<div class="scan-hint" style="color:#b91c1c;font-weight:700">'
+               'El código consultado no está registrado en la fuente seleccionada.</div>'
+               if st.session_state.not_found else
+               '<div class="scan-hint">El precio se mostrará automáticamente</div>'),
             unsafe_allow_html=True,
         )
+        if st.session_state.not_found:
+            st.error('PRODUCTO NO ENCONTRADO')
 
         lado_izquierdo, campo_central, lado_derecho = st.columns([1, 2, 1])
         with campo_central:
