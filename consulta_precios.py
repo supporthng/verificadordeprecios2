@@ -578,41 +578,11 @@ CSS += """<style>
 st.markdown(CSS, unsafe_allow_html=True)
 
 
-@st.cache_data(ttl=90, show_spinner=False)
+@st.cache_data(ttl=10, show_spinner=False)
 def catalog():
-    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
-        raise ValueError("Falta configurar Supabase en Streamlit Secrets.")
+    from inventarios import active_catalog
+    return active_catalog()
 
-    headers = {
-        "apikey": SUPABASE_ANON_KEY,
-        "Authorization": f"Bearer {SUPABASE_ANON_KEY}",
-    }
-    rows = []
-    page_size = 500
-    offset = 0
-
-    while True:
-        response = requests.get(
-            f"{SUPABASE_URL}/rest/v1/products",
-            params={
-                "select": "barcode,name,price",
-                "order": "barcode.asc",
-                "limit": page_size,
-                "offset": offset,
-            },
-            headers=headers,
-            timeout=25,
-        )
-        response.raise_for_status()
-        batch = response.json()
-        if not isinstance(batch, list):
-            raise ValueError("Respuesta inesperada de Supabase.")
-        rows.extend(batch)
-        if len(batch) < page_size:
-            break
-        offset += page_size
-
-    return pd.DataFrame(rows, columns=["barcode", "name", "price"])
 
 
 for key, default in (

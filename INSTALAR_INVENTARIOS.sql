@@ -1,0 +1,16 @@
+create table if not exists public.price_inventories(id bigint generated always as identity primary key,name text not null unique,is_active boolean not null default false);
+create unique index if not exists only_one_active_inventory on public.price_inventories(is_active) where is_active;
+create table if not exists public.price_inventory_items(inventory_id bigint not null references public.price_inventories(id) on delete cascade,barcode text not null,name text not null,price numeric(14,2) not null check(price>=0),primary key(inventory_id,barcode));
+alter table public.price_inventories enable row level security;
+alter table public.price_inventory_items enable row level security;
+grant select on public.price_inventories,public.price_inventory_items to anon,authenticated;
+drop policy if exists read_active_inventories on public.price_inventories;
+create policy read_active_inventories on public.price_inventories for select to anon,authenticated using(is_active);
+drop policy if exists read_active_inventory_items on public.price_inventory_items;
+create policy read_active_inventory_items on public.price_inventory_items for select to anon,authenticated using(exists(select 1 from public.price_inventories i where i.id=inventory_id and i.is_active));
+create or replace function public.activate_price_inventory(target_id bigint) returns void language plpgsql security definer set search_path=public as $$begin if not exists(select 1 from public.price_inventories where id=target_id) then raise exception 'Inventario no existe'; end if;update public.price_inventories set is_active=false where is_active;update public.price_inventories set is_active=true where id=target_id;end$$;
+create or replace function public.replace_price_inventory(target_id bigint,new_items jsonb) returns void language plpgsql security definer set search_path=public as $$begin if not exists(select 1 from public.price_inventories where id=target_id) then raise exception 'Inventario no existe';end if;delete from public.price_inventory_items where inventory_id=target_id;insert into public.price_inventory_items(inventory_id,barcode,name,price) select target_id,x.barcode,x.name,x.price from jsonb_to_recordset(new_items) as x(barcode text,name text,price numeric);end$$;
+revoke all on function public.activate_price_inventory(bigint) from public,anon,authenticated;
+revoke all on function public.replace_price_inventory(bigint,jsonb) from public,anon,authenticated;
+grant execute on function public.activate_price_inventory(bigint) to service_role;
+grant execute on function public.replace_price_inventory(bigint,jsonb) to service_role;

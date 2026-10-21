@@ -73,17 +73,10 @@ def api(method,table,params=None,payload=None):
     r.raise_for_status()
     return r.json()
 
-@st.cache_data(ttl=90,show_spinner=False)
+@st.cache_data(ttl=10,show_spinner=False)
 def productos_locales():
-    url=str(st.secrets.get('SUPABASE_URL','')).rstrip('/')
-    key=str(st.secrets.get('SUPABASE_ANON_KEY',''))
-    rows=[]; offset=0
-    while True:
-        r=requests.get(url+'/rest/v1/products',params={'select':'barcode,name,price','order':'barcode.asc','limit':500,'offset':offset},headers={'apikey':key,'Authorization':'Bearer '+key},timeout=25)
-        r.raise_for_status(); batch=r.json(); rows.extend(batch)
-        if len(batch)<500: break
-        offset+=500
-    return rows
+    from inventarios import active_catalog
+    return active_catalog().to_dict('records')
 
 def consultar(code):
     if not st.session_state.get('mobile_geo_allowed', False):

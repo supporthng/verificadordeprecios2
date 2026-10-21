@@ -1,6 +1,5 @@
 
 import hmac
-import io
 from datetime import datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
@@ -509,26 +508,8 @@ if file is not None:
 
     try:
         # Mostrar las columnas reales del Excel antes de interpretar productos.
-        # Detectar la fila real de encabezados en reportes con portada.
-        # No asumir que la primera fila contiene los nombres de columnas.
-        muestra = pd.read_excel(io.BytesIO(file.getvalue()), header=None,
-                                nrows=60, dtype=str, engine="openpyxl")
-        fila_encabezado = None
-        for fila_idx, valores in muestra.iterrows():
-            etiquetas = {normalize_header(v) for v in valores if pd.notna(v)}
-            tiene_codigo = bool(etiquetas & {"codigobarra", "codigobarras", "barcode", "ean", "upc", "codigo"})
-            tiene_nombre = bool(etiquetas & {"nombre", "nombredelproducto", "descripcion", "producto", "articulo"})
-            tiene_precio = bool(etiquetas & {"precio", "precioventa", "preciofinal", "pvp", "price"})
-            if tiene_codigo and tiene_nombre and tiene_precio:
-                fila_encabezado = fila_idx
-                break
-        if fila_encabezado is None:
-            raise ValueError("No se encontró una fila con encabezados de código, producto y precio en las primeras 60 filas.")
-        encabezados = pd.read_excel(io.BytesIO(file.getvalue()), header=fila_encabezado,
-                                    nrows=0, engine="openpyxl")
+        encabezados = pd.read_excel(file, nrows=0, engine="openpyxl")
         columnas = list(encabezados.columns)
-        if fila_encabezado:
-            st.info(f"Encabezados detectados automáticamente en la fila {fila_encabezado + 1}.")
         if len(columnas) < 3:
             raise ValueError("El archivo debe contener al menos tres columnas.")
 
@@ -544,13 +525,13 @@ if file is not None:
         with col_codigo:
             codigo_excel = st.selectbox(
                 "Código de barras", columnas,
-                index=sugerir({"codigobarra", "codigobarras", "barcode", "ean", "upc", "sku"}, 0),
+                index=sugerir({"codigobarra", "codigobarras", "codigo", "barcode", "ean", "upc", "sku"}, 0),
                 key=f"excel_col_codigo_{file.name}_{file.size}",
             )
         with col_nombre:
             nombre_excel = st.selectbox(
                 "Nombre / descripción", columnas,
-                index=sugerir({"nombre", "nombredelproducto", "descripcion", "producto", "articulo", "detalle", "description"}, 1),
+                index=sugerir({"nombre", "descripcion", "producto", "articulo", "detalle", "description"}, 1),
                 key=f"excel_col_nombre_{file.name}_{file.size}",
             )
         with col_precio:
@@ -563,22 +544,10 @@ if file is not None:
             st.warning("Selecciona una columna diferente para cada campo.")
             st.stop()
 
-        # Reescribir en memoria solo las tres columnas seleccionadas.
-        # parse_excel espera encabezados en la primera fila.
-        tabla = pd.read_excel(io.BytesIO(file.getvalue()), header=fila_encabezado,
-                              dtype=str, engine="openpyxl")
-        tabla = tabla[[codigo_excel, nombre_excel, precio_excel]].copy()
-        tabla.columns = ["barcode", "name", "price"]
-        tabla = tabla[~tabla["barcode"].fillna("").str.strip().str.upper().isin(
-            {"", "N/D", "ND", "N/A", "NA", "SIN CODIGO", "SIN CÓDIGO", "-"})]
-        memoria = io.BytesIO()
-        tabla.to_excel(memoria, index=False, engine="openpyxl")
-        memoria.seek(0)
-        class ExcelEnMemoria:
-            def getvalue(self):
-                return memoria.getvalue()
-        incoming = parse_excel(ExcelEnMemoria(), mapping={
-            "barcode": "barcode", "name": "name", "price": "price"
+        incoming = parse_excel(file, mapping={
+            "barcode": codigo_excel,
+            "name": nombre_excel,
+            "price": precio_excel,
         })
 
         st.success(
@@ -600,8 +569,6 @@ if file is not None:
             "barcode.asc",
         )
 
-        if current_products.empty:
-            current_products = pd.DataFrame(columns=["barcode", "name", "price"])
         comparison = compare_inventory(
             incoming,
             current_products,
@@ -710,7 +677,7 @@ if file is not None:
                     }
 
                     # Publicar primero los precios.
-                    publish(incoming)
+                    raise RuntimeError("Publicación anterior deshabilitada para evitar mezclar inventarios. Usa Inventarios independientes.")
 
                     # Registrar la publicación.
                     saved = api_post(
@@ -771,9 +738,11 @@ if file is not None:
     except (
         requests.RequestException,
         ValueError,
-    ) as e:
-        st.error("No se pudo procesar el Excel o consultar el inventario.")
-        st.caption(f"Detalle: {type(e).__name__}: {e}")
+    ):
+        st.error(
+            "No se pudo procesar el Excel "
+            "o consultar el inventario."
+        )
 
     except Exception:
         st.error(

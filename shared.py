@@ -15,26 +15,10 @@ def supabase_url():
     return secret('SUPABASE_URL').rstrip('/')
 
 
-@st.cache_data(ttl=90, show_spinner=False)
+@st.cache_data(ttl=10, show_spinner=False)
 def catalog():
-    url, key = supabase_url(), secret('SUPABASE_ANON_KEY')
-    if not url or not key:
-        raise ValueError('Falta la configuración pública de Supabase.')
-    headers = {'apikey': key, 'Authorization': f'Bearer {key}'}
-    rows, offset, size = [], 0, 500
-    while True:
-        response = requests.get(f'{url}/rest/v1/products', params={
-            'select': 'barcode,name,price', 'order': 'barcode.asc',
-            'limit': size, 'offset': offset}, headers=headers, timeout=30)
-        response.raise_for_status()
-        batch = response.json()
-        if not isinstance(batch, list):
-            raise ValueError('Respuesta inesperada del catálogo.')
-        rows.extend(batch)
-        if len(batch) < size:
-            break
-        offset += size
-    return pd.DataFrame(rows, columns=['barcode', 'name', 'price'])
+    from inventarios import active_catalog
+    return active_catalog()
 
 
 def normalize_header(value):
