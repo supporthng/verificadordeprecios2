@@ -358,20 +358,23 @@ CSS += """
 # Se oculta solo visualmente: NO usar display:none ni visibility:hidden.
 CSS += """
 <style>
-/* Mantener el lector visible y enfocable: el campo de 1px/opacity:0
-   puede perder el foco o no recibir las teclas del escáner. */
+/* El input sigue montado y enfocable; solo se oculta visualmente.
+   Nunca usar display:none, visibility:hidden ni type=hidden. */
 div[data-testid="stTextInput"] {
-    position: relative !important;
-    width: 100% !important;
-    height: auto !important;
+    position: absolute !important;
+    left: -10000px !important;
+    top: auto !important;
+    width: 300px !important;
+    height: 48px !important;
+    opacity: 0 !important;
     overflow: visible !important;
-    opacity: 1 !important;
-    pointer-events: auto !important;
+    pointer-events: none !important;
 }
 div[data-testid="stTextInput"] input {
-    text-align: center !important;
-    font-size: 18px !important;
-    border-radius: 12px !important;
+    width: 300px !important;
+    height: 48px !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
 }
 </style>
 """
@@ -840,7 +843,7 @@ def verificador():
                 placeholder="Escanea o escribe el código y pulsa Enter",
             )
 
-        st.caption("El lector debe enviar Enter al finalizar el código. También puedes escribirlo y pulsar Enter.")
+        # La caja de lectura permanece oculta, pero el lector escribe en ella con el foco automático.
 
         # st.html ejecuta JS en la página (no dentro de un iframe) en versiones
         # de Streamlit que admiten unsafe_allow_javascript.
