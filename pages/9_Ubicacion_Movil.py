@@ -1,10 +1,12 @@
 """Configuración de ubicación del establecimiento mediante GPS del navegador."""
 import math
+import re
 import streamlit as st
 from mobile_geofence import get_settings, save_settings
 from streamlit_geolocation import streamlit_geolocation
 import pandas as pd
 import requests
+from urllib.parse import unquote
 
 if not st.session_state.get('admin_authenticated', False):
     st.error('Esta configuración requiere iniciar sesión como administrador.')
@@ -69,48 +71,80 @@ if st.session_state.get('geo_location_applied'):
 st.toggle('Exigir ubicación para Consulta Móvil',key='geo_form_enabled')
 st.number_input('Latitud',min_value=-90.0,max_value=90.0,step=0.000001,format='%.7f',key='geo_form_lat')
 st.number_input('Longitud',min_value=-180.0,max_value=180.0,step=0.000001,format='%.7f',key='geo_form_lon')
-
 st.divider()
-st.subheader('Buscar y seleccionar establecimiento')
-st.caption('Busca una dirección o establecimiento. También puedes introducir las coordenadas manualmente.')
-address = st.text_input('Dirección o nombre del establecimiento', placeholder='Ej.: calle, sector, ciudad, República Dominicana')
-if st.button('🔎 Buscar en el mapa', use_container_width=True):
-    if not address.strip():
-        st.warning('Escribe una dirección o nombre para buscar.')
+st.subheader('Buscar dirección o establecimiento')
+st.caption('Búsqueda gratuita mundial. Si un negocio no figura en mapas abiertos, usa Google Maps para copiar sus coordenadas.')
+query = st.text_input('Nombre, calle, sector, ciudad o dirección', key='geo_search_text',
+                      placeholder='Ej.: supermercado en Santo Domingo')
+if st.button('🔎 Buscar ubicación', use_container_width=True):
+    if not query.strip():
+        st.warning('Escribe un lugar o una dirección.')
     else:
+        results = []
         try:
-            response = requests.get('https://nominatim.openstreetmap.org/search',
-                params={'q':address.strip(),'format':'json','limit':5,'countrycodes':'do'},
-                headers={'User-Agent':'VerificadorDePrecios/1.0 (business-location-picker)'}, timeout=12)
-            response.raise_for_status()
-            matches = response.json()
-            st.session_state.geo_matches = matches
-            if not matches:
-                st.warning('No encontramos resultados. Prueba con una dirección más específica o introduce las coordenadas.')
-        except requests.RequestException:
-            st.error('No se pudo consultar el buscador de direcciones. Puedes escribir las coordenadas manualmente.')
-matches = st.session_state.get('geo_matches',[])
-if matches:
-    choices = {str(i):r.get('display_name', 'Resultado '+str(i)) for i,r in enumerate(matches)}
-    choice = st.selectbox('Selecciona la ubicación encontrada', options=list(choices),format_func=lambda i:choices[i])
-    if st.button('📍 Usar esta ubicación',use_container_width=True):
-        r=matches[int(choice)]
-        st.session_state.geo_form_lat=float(r['lat'])
-        st.session_state.geo_form_lon=float(r['lon'])
+            r = requests.get('https://photon.komoot.io/api/',
+                params={'q':query.strip(), 'limit':8, 'lang':'es'},
+                headers={'User-Agent':'ConsultaPreciosLocationPicker/1.0'}, timeout=12)
+            r.raise_for_status()
+            for feature in r.json().get('features', []):
+                coords=feature.get('geometry',{}).get('coordinates',[])
+                props=feature.get('properties',{})
+                if len(coords)==2:
+                    label=', '.join(str(props.get(k)) for k in ('name','street','city','state','country') if props.get(k))
+                    results.append({'label':label or 'Ubicación', 'lat':float(coords[1]),'lon':float(coords[0])})
+        except (requests.RequestException, ValueError, TypeError, KeyError):
+            pass
+        if not results:
+            try:
+                r=requests.get('https://nominatim.openstreetmap.org/search',
+                    params={'q':query.strip(),'format':'json','limit':8},
+                    headers={'User-Agent':'ConsultaPreciosLocationPicker/1.0'},timeout=12)
+                r.raise_for_status()
+                results=[{'label':x['display_name'],'lat':float(x['lat']),'lon':float(x['lon'])} for x in r.json()]
+            except (requests.RequestException, ValueError, TypeError, KeyError):
+                pass
+        st.session_state.geo_results=results
+        if not results:
+            st.warning('Sin resultados en los mapas abiertos. Puedes localizar el negocio en Google Maps y pegar sus coordenadas debajo.')
+results=st.session_state.get('geo_results',[])
+if results:
+    selected_index=st.selectbox('Resultados encontrados',range(len(results)),
+        format_func=lambda i:results[i]['label'],key='geo_result_index')
+    if st.button('📍 Seleccionar resultado',use_container_width=True):
+        result=results[selected_index]
+        st.session_state.geo_form_lat=result['lat']
+        st.session_state.geo_form_lon=result['lon']
         st.session_state.geo_location_applied=False
-        st.success('Coordenadas cargadas. Revisa el mapa y pulsa Guardar ubicación.')
         st.rerun()
 
-lat, lon = float(st.session_state.geo_form_lat),float(st.session_state.geo_form_lon)
-if lat == 0 and lon == 0:
-    st.info('Busca el establecimiento o introduce latitud y longitud para visualizar el mapa.')
+st.subheader('Usar coordenadas de Google Maps')
+st.caption('En Google Maps haz clic derecho en el punto exacto y copia los dos números de latitud y longitud.')
+coordinates=st.text_input('Pegar coordenadas o enlace de Google Maps',key='geo_pasted_coords',
+                           placeholder='18.123456, -69.123456')
+if st.button('Aplicar coordenadas',use_container_width=True):
+    value=unquote(coordinates.strip())
+    match=(re.search(r'@(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)',value)
+           or re.search(r'[?&](?:q|query|ll)=(-?\d{1,2}\.\d+)%?2[Cc](-?\d{1,3}\.\d+)',coordinates)
+           or re.search(r'(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)',value))
+    if match:
+        lat0,lon0=map(float,match.groups())
+        if -90<=lat0<=90 and -180<=lon0<=180:
+            st.session_state.geo_form_lat=lat0
+            st.session_state.geo_form_lon=lon0
+            st.rerun()
+        else:
+            st.error('Las coordenadas están fuera del rango permitido.')
+    else:
+        st.warning('Este enlace no contiene coordenadas explícitas. Abre el lugar en Google Maps, haz clic derecho sobre el marcador y copia las coordenadas.')
+
+st.subheader('Vista previa del punto autorizado')
+lat,lon=float(st.session_state.geo_form_lat),float(st.session_state.geo_form_lon)
+if lat==0 and lon==0:
+    st.info('Selecciona un resultado, detecta tu ubicación o introduce las coordenadas.')
 else:
-    # Mapa nativo de Streamlit, sin iframe de Folium que puede quedar en blanco.
-    st.map(pd.DataFrame([{'lat':lat,'lon':lon}]),zoom=16,size=140)
-    st.caption('Marcador: centro seleccionado. Radio autorizado: 100 metros alrededor del punto. '
-               'Puedes afinar las coordenadas en los campos superiores.')
-    st.link_button('Abrir ubicación en Google Maps',
-                   f'https://www.google.com/maps?q={lat:.7f},{lon:.7f}',use_container_width=True)
+    st.map(pd.DataFrame([{'lat':lat,'lon':lon}]),latitude='lat',longitude='lon',zoom=16,size=140)
+    st.caption('Centro seleccionado. La restricción de acceso móvil seguirá siendo de 100 metros. Puedes ajustar la latitud y longitud en los campos superiores.')
+    st.link_button('Abrir punto en Google Maps',f'https://www.google.com/maps?q={lat:.7f},{lon:.7f}',use_container_width=True)
 
 if st.button('Guardar ubicación',type='primary',use_container_width=True):
     try:
