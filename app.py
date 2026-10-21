@@ -421,6 +421,7 @@ pagina_tradicional = st.Page("consulta_precios.py", title="Consulta de Precios",
 pagina_movil = st.Page("pages/8_Escaner_Movil.py", title="Escáner Móvil", icon="📱")
 pages = {"Principal": [pagina_tradicional, pagina_movil]}
 config = [
+    ("cargar_archivo", "pages/1_Administracion.py", "Administración de Precios · Cargar Excel", "📤"),
     ("consultar_base", "pages/4_Listado_Productos.py", "Consulta de Base de Datos", "📋"),
     ("fuentes", "pages/2_Fuentes_de_datos.py", "Fuentes de Datos", "🔌"),
     ("configurar", "pages/3_Consulta_Bases_de_Datos.py", "Configurar Consulta", "⚙️"),
