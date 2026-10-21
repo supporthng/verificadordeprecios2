@@ -9,6 +9,7 @@ import time
 
 # Verificación previa: nunca consultar productos sin autorización geográfica.
 from mobile_geofence import get_settings, validate_location
+from streamlit_js_eval import get_geolocation
 
 try:
     geo_settings = get_settings()
@@ -22,58 +23,41 @@ if st.session_state.get('mobile_public_access') and not geo_settings['enabled']:
     st.stop()
 
 if geo_settings['enabled']:
-    # La solicitud GPS ocurre en una página web superior, no dentro de un iframe.
-    # NOTA: las coordenadas de URL son aportadas por el cliente; no son prueba
-    # antifraude. Se exige antigüedad corta y validación del radio.
-    import math
-    import time as _geo_time
-    from urllib.parse import urlencode
+    # Un componente distinto al anterior solicita el GPS desde el navegador.
+    # No se autoriza el escáner hasta recibir coordenadas verificables.
     st.session_state['mobile_geo_allowed'] = False
     st.caption('📍 Para consultar precios, permite el acceso a tu ubicación precisa.')
-
-    gps_keys = ('gps_lat', 'gps_lon', 'gps_acc', 'gps_ts')
-    if any(k in st.query_params for k in gps_keys):
-        try:
-            lat = float(st.query_params['gps_lat'])
-            lon = float(st.query_params['gps_lon'])
-            acc = float(st.query_params['gps_acc'])
-            ts = float(st.query_params['gps_ts'])
-            if not all(math.isfinite(x) for x in (lat, lon, acc, ts)):
-                raise ValueError('Valores no finitos')
-            if abs(_geo_time.time() - ts) > 90:
-                raise ValueError('La ubicación ha caducado. Solicítala de nuevo.')
-            ok, msg = validate_location(
-                {'latitude':lat, 'longitude':lon, 'accuracy':acc}, geo_settings)
-            st.session_state['mobile_geo_check'] = {
-                'ok': bool(ok), 'message': msg, 'expires': _geo_time.time() + 90
-            }
-        except (KeyError, TypeError, ValueError) as exc:
-            st.session_state['mobile_geo_check'] = {
-                'ok':False, 'message': 'Ubicación inválida: ' + str(exc), 'expires':0
-            }
-        for k in gps_keys:
-            if k in st.query_params:
-                del st.query_params[k]
-
-    check = st.session_state.get('mobile_geo_check', {})
-    if check.get('ok') and _geo_time.time() < check.get('expires', 0):
-        st.session_state['mobile_geo_allowed'] = True
-        st.success(check['message'])
-    else:
-        if check.get('message'):
-            st.warning(check['message'])
-        st.info('Pulsa el botón para solicitar el GPS en una página independiente. '
-                'Esto evita las restricciones de los componentes incrustados.')
-        gps_page = str(st.secrets.get('GPS_PAGE_URL', '')).strip()
-        if gps_page.startswith('https://'):
-            return_url = 'https://verificadordeprecios.streamlit.app/?movil=1'
-            st.link_button('📍 Comprobar mi ubicación',
-                gps_page + ('&' if '?' in gps_page else '?') + urlencode({'return':return_url}),
-                use_container_width=True, type='primary')
-        else:
-            st.error('Falta configurar GPS_PAGE_URL en los secretos de Streamlit. '
-                     'Publica primero docs/gps.html con GitHub Pages.')
+    # Montar el componente GPS desde el primer render. El navegador puede
+    # exigir pulsar su propio control azul para conceder el permiso.
+    st.markdown('**👇 Pulsa el botón azul de ubicación que aparece debajo para activar el GPS.**')
+    st.caption('Si el navegador ya autorizó la ubicación, el escáner se abrirá automáticamente.')
+    try:
+        # get_geolocation usa navigator.geolocation del navegador y entrega
+        # un objeto con coords.latitude, coords.longitude y coords.accuracy.
+        response = get_geolocation()
+    except Exception as exc:
+        st.error('No se pudo iniciar la geolocalización del navegador.')
+        st.caption(f'Detalle técnico: {type(exc).__name__}: {exc}')
         st.stop()
+    if not response:
+        st.info('Esperando ubicación. Si no aparece el permiso, pulsa el botón azul de GPS situado arriba.')
+        st.stop()
+    if isinstance(response, dict) and response.get('error'):
+        st.error('El navegador no pudo obtener la ubicación: ' + str(response['error']))
+        st.stop()
+    coords = response.get('coords', response) if isinstance(response, dict) else {}
+    if not isinstance(coords, dict):
+        coords = {}
+    current_location = {name: coords.get(name) for name in ('latitude', 'longitude', 'accuracy')}
+    if any(value is None for value in current_location.values()):
+        st.warning('El navegador no devolvió coordenadas completas. Activa la ubicación precisa y vuelve a intentarlo.')
+        st.stop()
+    authorized, geo_message = validate_location(current_location, geo_settings)
+    if not authorized:
+        st.warning(geo_message)
+        st.stop()
+    st.success(geo_message)
+    st.session_state['mobile_geo_allowed'] = True
 else:
     st.session_state['mobile_geo_allowed'] = True
 
