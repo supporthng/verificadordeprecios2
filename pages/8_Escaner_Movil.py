@@ -26,12 +26,31 @@ if geo_settings['enabled']:
     # El componente solicita permiso al navegador. Cada recarga de la página requiere
     # una comprobación nueva; no se persiste una autorización GPS en cookies.
     st.caption('📍 Para consultar precios, permite el acceso a tu ubicación precisa.')
-    current_location = streamlit_geolocation()
+    st.session_state.setdefault('mobile_geo_attempt', 0)
+    st.session_state.setdefault('mobile_geo_requesting', False)
+    st.session_state['mobile_geo_allowed'] = False
+    if st.button('📍 Comprobar mi ubicación', key='mobile_geo_retry', use_container_width=True):
+        st.session_state.mobile_geo_attempt += 1
+        st.session_state.mobile_geo_requesting = True
+        st.rerun()
+    if not st.session_state.mobile_geo_requesting:
+        st.info('Pulsa Comprobar mi ubicación y acepta el permiso del navegador. En iPhone, activa Ubicación precisa para Safari.')
+        st.stop()
+    # Cada intento monta un componente nuevo; evita conservar una respuesta vacía.
+    try:
+        current_location = streamlit_geolocation(key=f'mobile_geo_{st.session_state.mobile_geo_attempt}')
+    except Exception as exc:
+        st.error('No se pudo iniciar el servicio de ubicación del navegador.')
+        st.caption(f'Detalle técnico: {type(exc).__name__}')
+        st.stop()
+    if not isinstance(current_location, dict) or current_location.get('latitude') is None or current_location.get('longitude') is None:
+        st.warning('El navegador todavía no ha entregado coordenadas. Comprueba el permiso de ubicación y vuelve a pulsar Comprobar mi ubicación.')
+        st.stop()
     authorized, geo_message = validate_location(current_location, geo_settings)
     if not authorized:
         st.warning(geo_message)
         st.stop()
-    # También se comprueba antes de iniciar cada consulta.
+    st.success(geo_message)
     st.session_state['mobile_geo_allowed'] = True
 else:
     st.session_state['mobile_geo_allowed'] = True

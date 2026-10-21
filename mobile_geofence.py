@@ -45,17 +45,17 @@ def validate_location(location, settings):
         return False, 'Autoriza el acceso a la ubicación para utilizar Consulta Móvil.'
     try:
         lat, lon = float(location['latitude']), float(location['longitude'])
-        accuracy = float(location['accuracy'])
+        accuracy = float(location.get('accuracy') or 0)
         if not all(map(math.isfinite, (lat, lon, accuracy))):
             raise ValueError()
         if not (-90 <= lat <= 90 and -180 <= lon <= 180 and accuracy > 0):
             raise ValueError()
     except (KeyError, TypeError, ValueError):
-        return False, 'No se obtuvo una ubicación válida. Activa GPS y concede el permiso.'
+        return False, 'El navegador devolvió coordenadas incompletas o una precisión GPS inválida. Activa Ubicación precisa y vuelve a intentarlo.'
     radius = float(settings['radius_m'])
     if accuracy > radius:
         return False, f'Ubicación imprecisa (±{accuracy:.0f} m). Activa ubicación precisa y vuelve a intentar.'
     distance = distance_m(lat, lon, float(settings['latitude']), float(settings['longitude']))
     if distance > radius:
         return False, f'Fuera de la zona autorizada ({radius:.0f} metros). Distancia aproximada: {distance:.0f} m.'
-    return True, f'Ubicación autorizada · distancia aproximada {distance:.0f} m · precisión GPS ±{accuracy:.0f} m · radio {radius:.0f} m.'
+    return True, f'Ubicación autorizada · distancia aproximada {distance:.0f} m.'
