@@ -3,8 +3,8 @@ import math
 import streamlit as st
 from mobile_geofence import get_settings, save_settings
 from streamlit_geolocation import streamlit_geolocation
-import folium
-from streamlit_folium import st_folium
+import pandas as pd
+import requests
 
 if not st.session_state.get('admin_authenticated', False):
     st.error('Esta configuración requiere iniciar sesión como administrador.')
@@ -69,30 +69,48 @@ if st.session_state.get('geo_location_applied'):
 st.toggle('Exigir ubicación para Consulta Móvil',key='geo_form_enabled')
 st.number_input('Latitud',min_value=-90.0,max_value=90.0,step=0.000001,format='%.7f',key='geo_form_lat')
 st.number_input('Longitud',min_value=-180.0,max_value=180.0,step=0.000001,format='%.7f',key='geo_form_lon')
+
 st.divider()
-st.subheader('Seleccionar establecimiento en el mapa')
-st.caption('Toca el mapa para colocar el marcador. Puedes ampliar, mover el mapa y seleccionar el punto exacto. Después pulsa Guardar ubicación.')
-lat, lon = float(st.session_state.geo_form_lat), float(st.session_state.geo_form_lon)
-# Evitar centrar el mapa en 0,0 si todavía no se configuró el establecimiento.
-center = [lat, lon] if (lat != 0 or lon != 0) else [18.47, -69.93]
-m = folium.Map(location=center, zoom_start=17 if (lat != 0 or lon != 0) else 11, control_scale=True)
-if lat != 0 or lon != 0:
-    folium.Marker([lat, lon], tooltip='Ubicación seleccionada', icon=folium.Icon(color='blue')).add_to(m)
-    folium.Circle([lat, lon], radius=100, color='#1677cc', fill=True,
-                  fill_opacity=0.12, tooltip='Radio autorizado: 100 m').add_to(m)
-selected = st_folium(m, height=380, width=None, key='geo_map_selector',
-                     returned_objects=['last_clicked'])
-clicked = (selected or {}).get('last_clicked')
-if clicked:
-    new_lat, new_lon = float(clicked['lat']), float(clicked['lng'])
-    click_id = (round(new_lat, 7), round(new_lon, 7))
-    if st.session_state.get('geo_last_map_click') != click_id:
-        st.session_state.geo_last_map_click = click_id
-        st.session_state.geo_form_lat = new_lat
-        st.session_state.geo_form_lon = new_lon
-        st.session_state.geo_location_applied = False
+st.subheader('Buscar y seleccionar establecimiento')
+st.caption('Busca una dirección o establecimiento. También puedes introducir las coordenadas manualmente.')
+address = st.text_input('Dirección o nombre del establecimiento', placeholder='Ej.: calle, sector, ciudad, República Dominicana')
+if st.button('🔎 Buscar en el mapa', use_container_width=True):
+    if not address.strip():
+        st.warning('Escribe una dirección o nombre para buscar.')
+    else:
+        try:
+            response = requests.get('https://nominatim.openstreetmap.org/search',
+                params={'q':address.strip(),'format':'json','limit':5,'countrycodes':'do'},
+                headers={'User-Agent':'VerificadorDePrecios/1.0 (business-location-picker)'}, timeout=12)
+            response.raise_for_status()
+            matches = response.json()
+            st.session_state.geo_matches = matches
+            if not matches:
+                st.warning('No encontramos resultados. Prueba con una dirección más específica o introduce las coordenadas.')
+        except requests.RequestException:
+            st.error('No se pudo consultar el buscador de direcciones. Puedes escribir las coordenadas manualmente.')
+matches = st.session_state.get('geo_matches',[])
+if matches:
+    choices = {str(i):r.get('display_name', 'Resultado '+str(i)) for i,r in enumerate(matches)}
+    choice = st.selectbox('Selecciona la ubicación encontrada', options=list(choices),format_func=lambda i:choices[i])
+    if st.button('📍 Usar esta ubicación',use_container_width=True):
+        r=matches[int(choice)]
+        st.session_state.geo_form_lat=float(r['lat'])
+        st.session_state.geo_form_lon=float(r['lon'])
+        st.session_state.geo_location_applied=False
+        st.success('Coordenadas cargadas. Revisa el mapa y pulsa Guardar ubicación.')
         st.rerun()
-st.caption('El mapa permite seleccionar manualmente la ubicación sin GPS. Detectar mi ubicación sigue requiriendo permiso del navegador y HTTPS.')
+
+lat, lon = float(st.session_state.geo_form_lat),float(st.session_state.geo_form_lon)
+if lat == 0 and lon == 0:
+    st.info('Busca el establecimiento o introduce latitud y longitud para visualizar el mapa.')
+else:
+    # Mapa nativo de Streamlit, sin iframe de Folium que puede quedar en blanco.
+    st.map(pd.DataFrame([{'lat':lat,'lon':lon}]),zoom=16,size=140)
+    st.caption('Marcador: centro seleccionado. Radio autorizado: 100 metros alrededor del punto. '
+               'Puedes afinar las coordenadas en los campos superiores.')
+    st.link_button('Abrir ubicación en Google Maps',
+                   f'https://www.google.com/maps?q={lat:.7f},{lon:.7f}',use_container_width=True)
 
 if st.button('Guardar ubicación',type='primary',use_container_width=True):
     try:
