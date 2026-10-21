@@ -15,6 +15,15 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+# Acceso público exclusivo a Consulta Móvil mediante ?movil=1.
+# No crea sesión de usuario ni permite navegar a Administración.
+if str(st.query_params.get("movil", "")) == "1":
+    st.session_state["mobile_public_access"] = True
+    pagina_publica = st.Page("pages/8_Escaner_Movil.py", title="Consulta Móvil", icon="📱", default=True)
+    st.navigation([pagina_publica], position="hidden").run()
+    st.stop()
+st.session_state["mobile_public_access"] = False
+
 try:
     bootstrap()
 except Exception as exc:
@@ -399,9 +408,10 @@ config = [
     ("configurar", "pages/3_Consulta_Bases_de_Datos.py", "Configurar Consulta", "⚙️"),
     ("logo", "pages/3_Logo_del_negocio.py", "Logo del Negocio", "🖼️"),
     ("usuarios", "pages/5_Administrador_Usuarios.py", "Administrador de Usuarios", "👥"),
+    ("ubicacion_movil", "pages/9_Ubicacion_Movil.py", "Ubicación Consulta Móvil", "📍"),
 ]
 habilitadas = [st.Page(path, title=title, icon=icon)
-                for perm, path, title, icon in config if allowed(user, perm)]
+                for perm, path, title, icon in config if (es_administrador_autenticado if perm == "ubicacion_movil" else allowed(user, perm))]
 if habilitadas:
     pages["Configuración"] = habilitadas
 if es_solo_consulta:

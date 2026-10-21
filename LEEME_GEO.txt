@@ -1,0 +1,7 @@
+1. En Supabase SQL Editor ejecuta INSTALAR_GEO_MOVIL.sql.
+2. Sube app.py, mobile_geofence.py, requirements.txt y las dos paginas dentro de pages/ respetando rutas.
+3. Reinicia Streamlit Cloud si no instala streamlit-geolocation automaticamente.
+4. Inicia sesion como admin y abre Configuracion > Ubicacion Consulta Movil.
+5. Configura coordenadas reales del establecimiento y guarda. Radio fijo: 100 metros.
+6. En el movil permite Ubicacion precisa. Sin permiso o con precision insuficiente se bloquea.
+Nota: El GPS de navegador puede ser falsificado; no es una barrera antifraude.

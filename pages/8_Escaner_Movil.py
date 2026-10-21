@@ -7,6 +7,35 @@ import requests
 from datetime import datetime, timedelta, timezone
 import time
 
+# Verificación previa: nunca consultar productos sin autorización geográfica.
+from mobile_geofence import get_settings, validate_location
+from streamlit_geolocation import streamlit_geolocation
+
+try:
+    geo_settings = get_settings()
+except Exception:
+    st.error('Consulta Móvil bloqueada: no se pudo verificar la configuración geográfica.')
+    st.stop()
+
+# El enlace público nunca funciona si la restricción está desactivada.
+if st.session_state.get('mobile_public_access') and not geo_settings['enabled']:
+    st.error('Consulta Móvil pública no disponible: activa y configura la zona autorizada en Administración.')
+    st.stop()
+
+if geo_settings['enabled']:
+    # El componente solicita permiso al navegador. Cada recarga de la página requiere
+    # una comprobación nueva; no se persiste una autorización GPS en cookies.
+    st.caption('📍 Para consultar precios, permite el acceso a tu ubicación precisa.')
+    current_location = streamlit_geolocation()
+    authorized, geo_message = validate_location(current_location, geo_settings)
+    if not authorized:
+        st.warning(geo_message)
+        st.stop()
+    # También se comprueba antes de iniciar cada consulta.
+    st.session_state['mobile_geo_allowed'] = True
+else:
+    st.session_state['mobile_geo_allowed'] = True
+
 for key, default in {'movil_codigo':'','movil_ultimo':'','movil_producto':None,'movil_job':None,'movil_error':'','movil_foto':'','movil_mostrar_resultado':False,'movil_camera_version':0,'movil_resultado_desde':None}.items():
     st.session_state.setdefault(key,default)
 
@@ -32,6 +61,9 @@ def productos_locales():
     return rows
 
 def consultar(code):
+    if not st.session_state.get('mobile_geo_allowed', False):
+        st.error('Consulta bloqueada: ubicación no autorizada.')
+        return
     code=str(code).strip()
     if not code:return
     st.session_state.movil_mostrar_resultado=True

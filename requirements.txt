@@ -4,4 +4,6 @@ requests
 openpyxl
 streamlit-cookies-controller
 cryptography>=42,<48
+
 zxing-cpp>=2.2,<4
+streamlit-geolocation>=0.0.10,<1
