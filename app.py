@@ -416,39 +416,59 @@ if es_solo_consulta:
       [data-testid="stAppViewContainer"] { margin-left: 0 !important; }
     </style>
     """, unsafe_allow_html=True)
-    # Controles de salida para la cuenta de consulta.
-    st.markdown("""
-    <style>
-      .st-key-boton_salida_x_consulta, .st-key-boton_cambio_verificador {
-        position: fixed !important; left: 12px !important;
-        z-index: 999999 !important; width: 42px !important;
-      }
-      .st-key-boton_salida_x_consulta { top: 10px !important; }
-      .st-key-boton_cambio_verificador { top: 58px !important; }
-      .st-key-boton_salida_x_consulta button,
-      .st-key-boton_cambio_verificador button {
-        width: 40px !important; min-height: 38px !important;
-        height: 38px !important; padding: 0 !important;
-        background: #fff !important; color: #12376b !important;
-        border: 1px solid #a7bad3 !important;
-        border-radius: 8px !important; font-size: 22px !important;
-        box-shadow: 0 2px 7px rgba(0,0,0,.13) !important;
-      }
-      .st-key-boton_salida_x_consulta button:hover,
-      .st-key-boton_cambio_verificador button:hover {
-        background: #e5efff !important;
-      }
-    </style>
-    """, unsafe_allow_html=True)
     posicion_navegacion = "hidden"
 else:
     posicion_navegacion = "sidebar"
 
-# El botón de cambio siempre visible, incluso con la barra lateral abierta.
+# Controles discretos, transparentes y anclados abajo a la izquierda.
 st.markdown("""<style>
-.st-key-boton_cambio_verificador {position:fixed !important;left:12px !important;top:58px !important;z-index:999999 !important;width:44px !important}
-.st-key-boton_cambio_verificador button {width:42px !important;min-height:40px !important;padding:0 !important;background:white !important;color:#12376b !important;border:1px solid #a7bad3 !important;border-radius:8px !important;font-size:22px !important;box-shadow:0 2px 7px #0002 !important}
-</style>""",unsafe_allow_html=True)
+.st-key-boton_salida_x_consulta, .st-key-boton_cambio_verificador {
+    position: fixed !important;
+    bottom: max(14px, env(safe-area-inset-bottom)) !important;
+    top: auto !important;
+    z-index: 999999 !important;
+    width: 44px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+.st-key-boton_salida_x_consulta { left: 12px !important; }
+.st-key-boton_cambio_verificador { left: 62px !important; }
+.st-key-boton_salida_x_consulta button,
+.st-key-boton_cambio_verificador button {
+    width: 44px !important;
+    min-height: 44px !important;
+    height: 44px !important;
+    padding: 0 !important;
+    background: transparent !important;
+    border: 0 !important;
+    border-radius: 8px !important;
+    box-shadow: none !important;
+    color: #12376b !important;
+    font-size: 25px !important;
+    line-height: 1 !important;
+}
+.st-key-boton_salida_x_consulta button:hover,
+.st-key-boton_cambio_verificador button:hover,
+.st-key-boton_salida_x_consulta button:focus,
+.st-key-boton_cambio_verificador button:focus {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+}
+.st-key-boton_salida_x_consulta button:focus-visible,
+.st-key-boton_cambio_verificador button:focus-visible {
+    outline: 2px solid #12376b !important;
+    outline-offset: 2px !important;
+}
+/* No reservar espacio superior para los controles flotantes. */
+.st-key-boton_salida_x_consulta, .st-key-boton_cambio_verificador { flex: 0 0 auto !important; }
+@media(max-width: 700px) {
+    .st-key-boton_salida_x_consulta,
+    .st-key-boton_cambio_verificador {
+        bottom: max(16px, env(safe-area-inset-bottom)) !important;
+    }
+}
+</style>""", unsafe_allow_html=True)
 
 # Ejecutar el navegador exactamente una vez.
 navegacion = st.navigation(pages, position=posicion_navegacion)
@@ -459,7 +479,7 @@ if es_solo_consulta:
 # Mostrar el botón de cambio en TODAS las sesiones, incluidas admin y consulta.
 if True:
     en_movil = navegacion.title == "Escáner Móvil"
-    if st.button("🏷️" if en_movil else "📱", key="boton_cambio_verificador",
+    if st.button("▥" if en_movil else "▯", key="boton_cambio_verificador",
                  help="Cambiar a Consulta de Precios" if en_movil else "Cambiar a Escáner Móvil"):
         st.switch_page(pagina_tradicional if en_movil else pagina_movil)
 navegacion.run()
