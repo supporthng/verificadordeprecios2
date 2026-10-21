@@ -608,6 +608,87 @@ CSS += """<style>
 }
 </style>"""
 
+
+# Diseño compacto: todo el contenido de espera debe caber en pantallas
+# horizontales integradas. No afecta el resultado ni el lector de códigos.
+CSS += """
+<style>
+@media (orientation: landscape) and (min-width: 600px) and (max-height: 850px) {
+  [data-testid="stMainBlockContainer"], .block-container {
+    padding-top: 4px !important;
+    padding-bottom: 3px !important;
+  }
+  [data-testid="stVerticalBlock"] { gap: clamp(2px, .65dvh, 6px) !important; }
+  .main-header {
+    box-sizing: border-box !important;
+    min-height: 0 !important;
+    height: auto !important;
+    padding: clamp(8px, 1.8dvh, 15px) 18px !important;
+    margin: 0 auto clamp(3px, .8dvh, 8px) !important;
+    border-radius: 11px !important;
+  }
+  .main-header h1 { font-size: clamp(18px, 4.1dvh, 29px) !important; margin: 0 !important; }
+  .main-header p { font-size: clamp(10px, 2.2dvh, 14px) !important; margin: 2px 0 0 !important; }
+  .animated-barcode-card {
+    box-sizing: border-box !important;
+    width: min(390px, 58vw) !important;
+    height: auto !important;
+    padding: clamp(5px, 1.1dvh, 10px) 14px 5px !important;
+    margin: 0 auto clamp(3px, .7dvh, 7px) !important;
+  }
+  .animated-bars { height: clamp(42px, 12dvh, 85px) !important; }
+  .animated-barcode-caption { margin-top: 3px !important; font-size: clamp(10px, 2dvh, 14px) !important; }
+  .scan-title { font-size: clamp(17px, 3.8dvh, 28px) !important; margin: 0 !important; line-height: 1.1 !important; }
+  .scan-hint { font-size: clamp(11px, 2.3dvh, 15px) !important; margin: 1px 0 0 !important; }
+  .mobile-brand-pair {
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: center !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    width: fit-content !important;
+    max-width: min(94vw, 520px) !important;
+    gap: clamp(10px, 2.5vw, 22px) !important;
+    padding: clamp(6px, 1.2dvh, 12px) clamp(12px, 2vw, 20px) !important;
+    margin: clamp(2px, .5dvh, 5px) auto 0 !important;
+    border-radius: 12px !important;
+  }
+  .mobile-brand-logo img {
+    width: auto !important;
+    height: auto !important;
+    max-width: min(22vw, 150px) !important;
+    max-height: clamp(65px, 17dvh, 115px) !important;
+    object-fit: contain !important;
+  }
+  .mobile-brand-qr img {
+    width: auto !important;
+    height: auto !important;
+    max-width: min(20vw, 145px) !important;
+    max-height: clamp(70px, 19dvh, 125px) !important;
+    object-fit: contain !important;
+  }
+  .mobile-brand-qr-caption {
+    font-size: clamp(9px, 1.8dvh, 12px) !important;
+    padding: 4px 8px !important;
+    margin-top: 3px !important;
+    line-height: 1.2 !important;
+    white-space: nowrap !important;
+  }
+}
+@media (orientation: landscape) and (min-width: 600px) and (max-height: 450px) {
+  .main-header { padding: 5px 14px !important; }
+  .main-header h1 { font-size: 18px !important; }
+  .animated-bars { height: 42px !important; }
+  .animated-barcode-card { padding: 4px 12px !important; }
+  .scan-title { font-size: 17px !important; }
+  .mobile-brand-logo img { max-height: 65px !important; }
+  .mobile-brand-qr img { max-height: 75px !important; }
+  .mobile-brand-pair { padding: 5px 10px !important; }
+}
+</style>
+"""
+
 st.markdown(CSS, unsafe_allow_html=True)
 
 
