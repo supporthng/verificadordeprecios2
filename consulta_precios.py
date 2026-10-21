@@ -689,6 +689,58 @@ CSS += """
 </style>
 """
 
+# Ajuste equilibrado del verificador físico: priorizar legibilidad y QR escaneable.
+# Se aplica al estado de espera y no altera los resultados ni el campo de lectura.
+CSS += """
+<style>
+@media (orientation: landscape) and (min-width: 600px) and (max-height: 850px) {
+  .main-header {
+    padding: clamp(10px, 2.4dvh, 19px) 20px !important;
+    margin-bottom: clamp(6px, 1.3dvh, 12px) !important;
+  }
+  .main-header h1 { font-size: clamp(21px, 4.9dvh, 34px) !important; }
+  .main-header p { font-size: clamp(11px, 2.6dvh, 16px) !important; }
+  .animated-barcode-card {
+    width: min(460px, 69vw) !important;
+    padding: clamp(7px, 1.5dvh, 13px) 18px 7px !important;
+    margin-bottom: clamp(6px, 1.2dvh, 12px) !important;
+  }
+  .animated-bars { height: clamp(56px, 15dvh, 110px) !important; }
+  .animated-barcode-caption { font-size: clamp(12px, 2.3dvh, 16px) !important; }
+  .scan-title { font-size: clamp(20px, 4.5dvh, 32px) !important; }
+  .scan-hint { font-size: clamp(12px, 2.7dvh, 18px) !important; }
+  .mobile-brand-pair {
+    max-width: min(94vw, 630px) !important;
+    gap: clamp(18px, 3vw, 30px) !important;
+    padding: clamp(9px, 1.8dvh, 16px) clamp(16px, 2.6vw, 28px) !important;
+    margin-top: clamp(7px, 1.2dvh, 13px) !important;
+  }
+  .mobile-brand-logo img {
+    max-width: min(27vw, 195px) !important;
+    max-height: clamp(90px, 22dvh, 155px) !important;
+  }
+  .mobile-brand-qr img {
+    max-width: min(25vw, 185px) !important;
+    max-height: clamp(105px, 25dvh, 170px) !important;
+  }
+  .mobile-brand-qr-caption {
+    font-size: clamp(10px, 2.2dvh, 14px) !important;
+    padding: 6px 10px !important;
+    margin-top: 5px !important;
+  }
+}
+@media (orientation: landscape) and (min-width: 600px) and (max-height: 450px) {
+  .main-header { padding: 7px 15px !important; }
+  .main-header h1 { font-size: clamp(19px, 4.8dvh, 25px) !important; }
+  .animated-bars { height: clamp(48px, 15dvh, 66px) !important; }
+  .scan-title { font-size: clamp(19px, 4.7dvh, 24px) !important; }
+  .mobile-brand-logo img { max-height: clamp(78px, 22dvh, 100px) !important; }
+  .mobile-brand-qr img { max-height: clamp(88px, 25dvh, 115px) !important; }
+  .mobile-brand-pair { padding: 7px 14px !important; }
+}
+</style>
+"""
+
 st.markdown(CSS, unsafe_allow_html=True)
 
 
