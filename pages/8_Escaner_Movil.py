@@ -36,12 +36,12 @@ if geo_settings['enabled']:
     if not st.session_state.mobile_geo_requesting:
         st.info('Pulsa Comprobar mi ubicación y acepta el permiso del navegador. En iPhone, activa Ubicación precisa para Safari.')
         st.stop()
-    # Cada intento monta un componente nuevo; evita conservar una respuesta vacía.
+    # Solicita la ubicación mediante la firma compatible con streamlit-geolocation.
     try:
-        current_location = streamlit_geolocation(key=f'mobile_geo_{st.session_state.mobile_geo_attempt}')
+        current_location = streamlit_geolocation()
     except Exception as exc:
         st.error('No se pudo iniciar el servicio de ubicación del navegador.')
-        st.caption(f'Detalle técnico: {type(exc).__name__}')
+        st.caption(f'Detalle técnico: {type(exc).__name__}: {exc}')
         st.stop()
     if not isinstance(current_location, dict) or current_location.get('latitude') is None or current_location.get('longitude') is None:
         st.warning('El navegador todavía no ha entregado coordenadas. Comprueba el permiso de ubicación y vuelve a pulsar Comprobar mi ubicación.')
