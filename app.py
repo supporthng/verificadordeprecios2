@@ -40,9 +40,10 @@ cookies = CookieController()
 
 COOKIE_NAME = "consulta_precios_login_v2"
 COOKIE_SECONDS = 60 * 60 * 24 * 30
+ADMIN_COOKIE_SECONDS = 60 * 60 * 12
 
-def _token(usuario):
-    payload = {"id": str(usuario["id"]), "exp": int(time.time()) + COOKIE_SECONDS,
+def _token(usuario, lifetime=COOKIE_SECONDS):
+    payload = {"id": str(usuario["id"]), "exp": int(time.time()) + lifetime,
                "v": hashlib.sha256(usuario["password_hash"].encode()).hexdigest()[:24]}
     body = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).decode().rstrip("=")
     sig = hmac.new(_cookie_secret.encode(), body.encode(), hashlib.sha256).hexdigest()
@@ -59,7 +60,7 @@ def _recover(token):
             return None
         from auth_usuarios import api
         rows = api("GET", {"id": "eq." + str(payload["id"]), "select": "id,username,password_hash,active", "limit": 1})
-        if not rows or not rows[0]["active"] or str(rows[0]["username"]).strip().lower() == "admin":
+        if not rows or not rows[0]["active"]:
             return None
         version = hashlib.sha256(rows[0]["password_hash"].encode()).hexdigest()[:24]
         if not hmac.compare_digest(payload["v"], version):
@@ -138,13 +139,8 @@ if not st.session_state.usuario_id and not st.session_state.logout_pendiente:
     _esperar_cookie_recordada()
 
 user = current_user()
-# No restaurar automáticamente cuentas con permisos de administración.
-# La opción de recordar acceso es exclusiva de cuentas no administradoras.
-if user and (str(user["username"]).strip().lower() == "admin" or allowed(user, "usuarios")):
-    try:
-        cookies.remove(COOKIE_NAME)
-    except Exception:
-        pass
+# Las sesiones firmadas se restauran también para administradores.
+# La cookie de administrador tiene una vigencia reducida (12 horas).
 if not user:
     _oauth_login_notice = st.session_state.get("google_oauth_notice")
     if _oauth_login_notice:
@@ -218,7 +214,7 @@ if not user:
             recordar_acceso = st.checkbox(
                 "Recordar mi acceso en este verificador",
                 value=False,
-                help="Disponible solo para usuarios no administradores. Mantiene la sesión iniciada en este equipo durante 30 días; no guarda la contraseña."
+                help="Para usuarios normales: prolonga el acceso a 30 días. Sin marcar, y para administradores, la sesión dura hasta 12 horas. No guarda la contraseña."
             )
             entrar = st.form_submit_button("➜  Iniciar sesión", use_container_width=True)
         if entrar:
@@ -241,10 +237,16 @@ if not user:
                         or allowed(cuenta, "usuarios")
                     )
                     try:
-                        if recordar_acceso and not es_administrador:
+                        if es_administrador:
+                            cookies.set(COOKIE_NAME, _token(cuenta, ADMIN_COOKIE_SECONDS),
+                                        max_age=ADMIN_COOKIE_SECONDS)
+                        elif recordar_acceso:
                             cookies.set(COOKIE_NAME, _token(cuenta), max_age=COOKIE_SECONDS)
                         else:
-                            cookies.remove(COOKIE_NAME)
+                            # Mantener la sesión durante la navegación y recargas,
+                            # sin dejar una cookie persistente de 30 días.
+                            cookies.set(COOKIE_NAME, _token(cuenta, ADMIN_COOKIE_SECONDS),
+                                        max_age=ADMIN_COOKIE_SECONDS)
                     except Exception:
                         pass
                     st.session_state.fallos_login = 0
