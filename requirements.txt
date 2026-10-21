@@ -4,3 +4,4 @@ requests
 openpyxl
 streamlit-cookies-controller
 cryptography>=42,<48
+zxing-cpp>=2.2,<4

@@ -374,7 +374,7 @@ if _oauth_notice:
 
 pages = {"Principal": [
     st.Page("consulta_precios.py", title="Consulta de Precios", icon="🏷️", default=True),
-    st.Page("pages/8_Escaner_Movil.py", title="Escáner Móvil", icon="📱"),
+    st.Page("pages/8_Escaner_Movil.py", title="Escáner Móvil", icon="📱")
 ]}
 config = [
     ("consultar_base", "pages/4_Listado_Productos.py", "Consulta de Base de Datos", "📋"),
