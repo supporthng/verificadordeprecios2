@@ -9,7 +9,7 @@ import time
 
 # Verificación previa: nunca consultar productos sin autorización geográfica.
 from mobile_geofence import get_settings, validate_location
-from streamlit_geolocation import streamlit_geolocation
+from streamlit_js_eval import get_geolocation
 
 try:
     geo_settings = get_settings()
@@ -23,28 +23,39 @@ if st.session_state.get('mobile_public_access') and not geo_settings['enabled']:
     st.stop()
 
 if geo_settings['enabled']:
-    # El componente solicita permiso al navegador. Cada recarga de la página requiere
-    # una comprobación nueva; no se persiste una autorización GPS en cookies.
+    # Un componente distinto al anterior solicita el GPS desde el navegador.
+    # No se autoriza el escáner hasta recibir coordenadas verificables.
+    st.session_state['mobile_geo_allowed'] = False
     st.caption('📍 Para consultar precios, permite el acceso a tu ubicación precisa.')
     st.session_state.setdefault('mobile_geo_attempt', 0)
     st.session_state.setdefault('mobile_geo_requesting', False)
-    st.session_state['mobile_geo_allowed'] = False
     if st.button('📍 Comprobar mi ubicación', key='mobile_geo_retry', use_container_width=True):
         st.session_state.mobile_geo_attempt += 1
         st.session_state.mobile_geo_requesting = True
         st.rerun()
     if not st.session_state.mobile_geo_requesting:
-        st.info('Pulsa Comprobar mi ubicación y acepta el permiso del navegador. En iPhone, activa Ubicación precisa para Safari.')
+        st.info('Pulsa Comprobar mi ubicación y acepta el permiso de localización del navegador.')
         st.stop()
-    # Solicita la ubicación mediante la firma compatible con streamlit-geolocation.
     try:
-        current_location = streamlit_geolocation()
+        # get_geolocation usa navigator.geolocation del navegador y entrega
+        # un objeto con coords.latitude, coords.longitude y coords.accuracy.
+        response = get_geolocation()
     except Exception as exc:
-        st.error('No se pudo iniciar el servicio de ubicación del navegador.')
+        st.error('No se pudo iniciar la geolocalización del navegador.')
         st.caption(f'Detalle técnico: {type(exc).__name__}: {exc}')
         st.stop()
-    if not isinstance(current_location, dict) or current_location.get('latitude') is None or current_location.get('longitude') is None:
-        st.warning('El navegador todavía no ha entregado coordenadas. Comprueba el permiso de ubicación y vuelve a pulsar Comprobar mi ubicación.')
+    if not response:
+        st.info('Esperando respuesta del GPS. Si no aparece el permiso, comprueba la configuración de ubicación del sitio.')
+        st.stop()
+    if isinstance(response, dict) and response.get('error'):
+        st.error('El navegador no pudo obtener la ubicación: ' + str(response['error']))
+        st.stop()
+    coords = response.get('coords', response) if isinstance(response, dict) else {}
+    if not isinstance(coords, dict):
+        coords = {}
+    current_location = {name: coords.get(name) for name in ('latitude', 'longitude', 'accuracy')}
+    if any(value is None for value in current_location.values()):
+        st.warning('El navegador no devolvió coordenadas completas. Activa la ubicación precisa y vuelve a intentarlo.')
         st.stop()
     authorized, geo_message = validate_location(current_location, geo_settings)
     if not authorized:
