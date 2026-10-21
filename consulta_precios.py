@@ -18,7 +18,7 @@ FOCO_JS = r"""
   const SELECTOR = 'div[data-testid="stTextInput"] input';
   function enfocar() {
     const input = document.querySelector(SELECTOR);
-    if (!input || input.disabled || input.readOnly) return;
+    if (!input || input.disabled || input.readOnly || input.offsetParent === null) return;
     // No interrumpir al usuario si está escribiendo en otro control.
     const activo = document.activeElement;
     if (activo && activo !== document.body && activo !== input &&
@@ -109,52 +109,9 @@ def cargar_logo_negocio():
         pass
     return None
 
-@st.cache_data(ttl=60, show_spinner=False)
-def cargar_qr_movil():
-    """Obtiene la imagen QR configurada, desde el bucket privado existente."""
-    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
-        return None
-    try:
-        response = requests.get(
-            f"{SUPABASE_URL}/storage/v1/object/logo-negocio/qr-movil.png",
-            headers={
-                "apikey": SUPABASE_SERVICE_ROLE_KEY,
-                "Authorization": "Bearer " + SUPABASE_SERVICE_ROLE_KEY,
-            },
-            timeout=8,
-        )
-        if response.status_code == 200 and response.headers.get("content-type", "").startswith("image/"):
-            return response.content
-    except requests.RequestException:
-        pass
-    return None
-
 
 CSS = """
 <style>
-.mobile-brand-pair {
-    display: flex; justify-content: center; align-items: center;
-    gap: 26px; flex-wrap: wrap; width: fit-content; max-width: 100%;
-    margin: 14px auto 8px; padding: 18px 22px;
-    border-radius: 18px; background: #fff;
-    box-shadow: 0 8px 25px rgba(15, 40, 85, .08);
-}
-.mobile-brand-logo, .mobile-brand-qr {
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-}
-.mobile-brand-logo img { max-width: 220px; max-height: 155px; width: auto; height: auto; object-fit: contain; }
-.mobile-brand-qr img { width: min(170px, 38vw); height: auto; max-height: 170px; object-fit: contain; }
-.mobile-brand-qr-caption {
-    background: #103a70; color: #fff; font-size: 12px;
-    font-weight: 800; text-align: center; padding: 8px 12px;
-    border-radius: 9px; margin-top: 8px; letter-spacing: .2px;
-}
-@media (max-width: 540px) {
-    .mobile-brand-pair { gap: 12px; padding: 12px; }
-    .mobile-brand-logo img { max-width: 150px; max-height: 125px; }
-    .mobile-brand-qr img { width: min(140px, 38vw); }
-    .mobile-brand-qr-caption { font-size: 10px; padding: 7px 8px; }
-}
 .stApp { background: #f4f7fc; }
 .block-container {
     max-width: 100%;
@@ -401,13 +358,20 @@ CSS += """
 # Se oculta solo visualmente: NO usar display:none ni visibility:hidden.
 CSS += """
 <style>
+/* Mantener el lector visible y enfocable: el campo de 1px/opacity:0
+   puede perder el foco o no recibir las teclas del escáner. */
 div[data-testid="stTextInput"] {
-    position: absolute !important;
-    width: 1px !important;
-    height: 1px !important;
-    overflow: hidden !important;
-    opacity: 0 !important;
-    pointer-events: none !important;
+    position: relative !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+}
+div[data-testid="stTextInput"] input {
+    text-align: center !important;
+    font-size: 18px !important;
+    border-radius: 12px !important;
 }
 </style>
 """
@@ -607,139 +571,6 @@ CSS += """<style>
   .resultado-pantalla .resultado-datos {gap: 6px !important;}
 }
 </style>"""
-
-
-# Diseño compacto: todo el contenido de espera debe caber en pantallas
-# horizontales integradas. No afecta el resultado ni el lector de códigos.
-CSS += """
-<style>
-@media (orientation: landscape) and (min-width: 600px) and (max-height: 850px) {
-  [data-testid="stMainBlockContainer"], .block-container {
-    padding-top: 4px !important;
-    padding-bottom: 3px !important;
-  }
-  [data-testid="stVerticalBlock"] { gap: clamp(2px, .65dvh, 6px) !important; }
-  .main-header {
-    box-sizing: border-box !important;
-    min-height: 0 !important;
-    height: auto !important;
-    padding: clamp(8px, 1.8dvh, 15px) 18px !important;
-    margin: 0 auto clamp(3px, .8dvh, 8px) !important;
-    border-radius: 11px !important;
-  }
-  .main-header h1 { font-size: clamp(18px, 4.1dvh, 29px) !important; margin: 0 !important; }
-  .main-header p { font-size: clamp(10px, 2.2dvh, 14px) !important; margin: 2px 0 0 !important; }
-  .animated-barcode-card {
-    box-sizing: border-box !important;
-    width: min(390px, 58vw) !important;
-    height: auto !important;
-    padding: clamp(5px, 1.1dvh, 10px) 14px 5px !important;
-    margin: 0 auto clamp(3px, .7dvh, 7px) !important;
-  }
-  .animated-bars { height: clamp(42px, 12dvh, 85px) !important; }
-  .animated-barcode-caption { margin-top: 3px !important; font-size: clamp(10px, 2dvh, 14px) !important; }
-  .scan-title { font-size: clamp(17px, 3.8dvh, 28px) !important; margin: 0 !important; line-height: 1.1 !important; }
-  .scan-hint { font-size: clamp(11px, 2.3dvh, 15px) !important; margin: 1px 0 0 !important; }
-  .mobile-brand-pair {
-    box-sizing: border-box !important;
-    display: flex !important;
-    flex-direction: row !important;
-    justify-content: center !important;
-    align-items: center !important;
-    flex-wrap: nowrap !important;
-    width: fit-content !important;
-    max-width: min(94vw, 520px) !important;
-    gap: clamp(10px, 2.5vw, 22px) !important;
-    padding: clamp(6px, 1.2dvh, 12px) clamp(12px, 2vw, 20px) !important;
-    margin: clamp(2px, .5dvh, 5px) auto 0 !important;
-    border-radius: 12px !important;
-  }
-  .mobile-brand-logo img {
-    width: auto !important;
-    height: auto !important;
-    max-width: min(22vw, 150px) !important;
-    max-height: clamp(65px, 17dvh, 115px) !important;
-    object-fit: contain !important;
-  }
-  .mobile-brand-qr img {
-    width: auto !important;
-    height: auto !important;
-    max-width: min(20vw, 145px) !important;
-    max-height: clamp(70px, 19dvh, 125px) !important;
-    object-fit: contain !important;
-  }
-  .mobile-brand-qr-caption {
-    font-size: clamp(9px, 1.8dvh, 12px) !important;
-    padding: 4px 8px !important;
-    margin-top: 3px !important;
-    line-height: 1.2 !important;
-    white-space: nowrap !important;
-  }
-}
-@media (orientation: landscape) and (min-width: 600px) and (max-height: 450px) {
-  .main-header { padding: 5px 14px !important; }
-  .main-header h1 { font-size: 18px !important; }
-  .animated-bars { height: 42px !important; }
-  .animated-barcode-card { padding: 4px 12px !important; }
-  .scan-title { font-size: 17px !important; }
-  .mobile-brand-logo img { max-height: 65px !important; }
-  .mobile-brand-qr img { max-height: 75px !important; }
-  .mobile-brand-pair { padding: 5px 10px !important; }
-}
-</style>
-"""
-
-# Ajuste equilibrado del verificador físico: priorizar legibilidad y QR escaneable.
-# Se aplica al estado de espera y no altera los resultados ni el campo de lectura.
-CSS += """
-<style>
-@media (orientation: landscape) and (min-width: 600px) and (max-height: 850px) {
-  .main-header {
-    padding: clamp(10px, 2.4dvh, 19px) 20px !important;
-    margin-bottom: clamp(6px, 1.3dvh, 12px) !important;
-  }
-  .main-header h1 { font-size: clamp(21px, 4.9dvh, 34px) !important; }
-  .main-header p { font-size: clamp(11px, 2.6dvh, 16px) !important; }
-  .animated-barcode-card {
-    width: min(460px, 69vw) !important;
-    padding: clamp(7px, 1.5dvh, 13px) 18px 7px !important;
-    margin-bottom: clamp(6px, 1.2dvh, 12px) !important;
-  }
-  .animated-bars { height: clamp(56px, 15dvh, 110px) !important; }
-  .animated-barcode-caption { font-size: clamp(12px, 2.3dvh, 16px) !important; }
-  .scan-title { font-size: clamp(20px, 4.5dvh, 32px) !important; }
-  .scan-hint { font-size: clamp(12px, 2.7dvh, 18px) !important; }
-  .mobile-brand-pair {
-    max-width: min(94vw, 630px) !important;
-    gap: clamp(18px, 3vw, 30px) !important;
-    padding: clamp(9px, 1.8dvh, 16px) clamp(16px, 2.6vw, 28px) !important;
-    margin-top: clamp(7px, 1.2dvh, 13px) !important;
-  }
-  .mobile-brand-logo img {
-    max-width: min(27vw, 195px) !important;
-    max-height: clamp(90px, 22dvh, 155px) !important;
-  }
-  .mobile-brand-qr img {
-    max-width: min(25vw, 185px) !important;
-    max-height: clamp(105px, 25dvh, 170px) !important;
-  }
-  .mobile-brand-qr-caption {
-    font-size: clamp(10px, 2.2dvh, 14px) !important;
-    padding: 6px 10px !important;
-    margin-top: 5px !important;
-  }
-}
-@media (orientation: landscape) and (min-width: 600px) and (max-height: 450px) {
-  .main-header { padding: 7px 15px !important; }
-  .main-header h1 { font-size: clamp(19px, 4.8dvh, 25px) !important; }
-  .animated-bars { height: clamp(48px, 15dvh, 66px) !important; }
-  .scan-title { font-size: clamp(19px, 4.7dvh, 24px) !important; }
-  .mobile-brand-logo img { max-height: clamp(78px, 22dvh, 100px) !important; }
-  .mobile-brand-qr img { max-height: clamp(88px, 25dvh, 115px) !important; }
-  .mobile-brand-pair { padding: 7px 14px !important; }
-}
-</style>
-"""
 
 st.markdown(CSS, unsafe_allow_html=True)
 
@@ -1006,8 +837,10 @@ def verificador():
                 key="search_input",
                 on_change=buscar_producto,
                 label_visibility="collapsed",
-                placeholder="Escanea o escribe el código",
+                placeholder="Escanea o escribe el código y pulsa Enter",
             )
+
+        st.caption("El lector debe enviar Enter al finalizar el código. También puedes escribirlo y pulsar Enter.")
 
         # st.html ejecuta JS en la página (no dentro de un iframe) en versiones
         # de Streamlit que admiten unsafe_allow_javascript.
@@ -1020,43 +853,28 @@ def verificador():
                 "Actualiza Streamlit en requirements.txt."
             )
 
-        # Identidad visual: logo y QR centrados como un único conjunto.
         logo = cargar_logo_negocio()
-        qr_movil = cargar_qr_movil()
-
-        def imagen_embebida(datos, dimensiones):
-            if not datos:
-                return None
+        if logo:
+            # El logo se centra respecto a TODA la pantalla, no respecto
+            # a columnas de Streamlit que varían con el ancho del dispositivo.
             try:
-                with Image.open(BytesIO(datos)) as original:
-                    imagen = ImageOps.contain(original.convert("RGBA"), dimensiones)
+                with Image.open(BytesIO(logo)) as original:
+                    imagen = ImageOps.contain(original.convert("RGBA"), (220, 130))
                     salida = BytesIO()
                     imagen.save(salida, format="PNG")
-                    return base64.b64encode(salida.getvalue()).decode("ascii")
+                    imagen_base64 = base64.b64encode(salida.getvalue()).decode("ascii")
+                st.markdown(
+                    '<div style="width:100%;display:flex;justify-content:center;'
+                    'align-items:center;margin:10px auto 0;">'
+                    '<img alt="Logo de la empresa" '
+                    'style="display:block;width:auto;max-width:220px;'
+                    'height:auto;max-height:130px;object-fit:contain;" '
+                    f'src="data:image/png;base64,{imagen_base64}">'
+                    '</div>',
+                    unsafe_allow_html=True,
+                )
             except (OSError, ValueError):
-                return None
-
-        logo_b64 = imagen_embebida(logo, (220, 155))
-        qr_b64 = imagen_embebida(qr_movil, (190, 190))
-        if logo_b64 or qr_b64:
-            tarjetas = []
-            if logo_b64:
-                tarjetas.append(
-                    '<div class="mobile-brand-logo">'
-                    f'<img alt="Logo del negocio" src="data:image/png;base64,{logo_b64}">'
-                    '</div>'
-                )
-            if qr_b64:
-                tarjetas.append(
-                    '<div class="mobile-brand-qr">'
-                    f'<img alt="Código QR de consulta móvil" src="data:image/png;base64,{qr_b64}">'
-                    '<div class="mobile-brand-qr-caption">📱 CONSULTA DESDE TU CELULAR</div>'
-                    '</div>'
-                )
-            st.markdown(
-                '<div class="mobile-brand-pair">' + ''.join(tarjetas) + '</div>',
-                unsafe_allow_html=True,
-            )
+                pass
 
 
 
