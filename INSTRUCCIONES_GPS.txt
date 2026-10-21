@@ -1,0 +1,18 @@
+CONFIGURACIÓN DEL GPS SIN IFRAME (REQUISITO PREVIO)
+
+1. Sube pages/8_Escaner_Movil.py y docs/gps.html a GitHub.
+2. En el repositorio GitHub: Settings > Pages > Build and deployment:
+   Deploy from a branch > main > /docs > Save.
+3. Espera la publicación. Abre https://TU-USUARIO.github.io/TU-REPOSITORIO/gps.html
+   y comprueba que aparece el botón "Permitir ubicación y continuar".
+4. En Streamlit Cloud > Manage app > Settings > Secrets añade:
+   GPS_PAGE_URL = "https://TU-USUARIO.github.io/TU-REPOSITORIO/gps.html"
+   Sustituye el usuario y el repositorio por los reales.
+5. Reinicia la app y prueba Consulta Móvil en iPhone.
+
+La página de GitHub Pages se ejecuta fuera de un iframe y puede solicitar el GPS
+directamente. No requiere Google Maps API ni facturación.
+LIMITACIÓN: los datos GPS son proporcionados por el cliente y pueden manipularse.
+El control por GPS no constituye una barrera antifraude sólida.
+El enlace de retorno incluye temporalmente coordenadas en la URL, que pueden
+quedar en historial o registros; la aplicación intenta eliminarlas al recibirlas.

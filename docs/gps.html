@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verificar ubicación · Consulta Móvil</title>
+<style>body{font-family:system-ui,sans-serif;max-width:520px;margin:14vh auto;padding:22px;color:#193047}
+button{width:100%;border:0;border-radius:12px;background:#1259cc;color:white;padding:18px;font-size:18px}
+p{line-height:1.5}.error{color:#b42318}#status{margin-top:20px}</style></head>
+<body><h2>📍 Verificar mi ubicación</h2><p>Autoriza tu ubicación precisa para continuar a Consulta Móvil.</p>
+<button id="check">Permitir ubicación y continuar</button><p id="status" role="status"></p>
+<script>
+"use strict";
+const statusEl=document.getElementById('status');
+const params=new URLSearchParams(location.search);
+const target=params.get('return')||'';
+let targetUrl;
+try {
+ targetUrl=new URL(target);
+ if(targetUrl.protocol!=='https:' || targetUrl.hostname!=='verificadordeprecios.streamlit.app')
+  throw Error('Destino no permitido');
+} catch(e) { statusEl.textContent='El enlace de retorno no es válido.';document.getElementById('check').disabled=true; }
+document.getElementById('check').addEventListener('click',()=>{
+ if(!targetUrl)return;
+ if(!window.isSecureContext || !navigator.geolocation){
+   statusEl.className='error';statusEl.textContent='Este navegador no permite GPS en esta página.';return;
+ }
+ statusEl.className='';statusEl.textContent='Esperando autorización del navegador…';
+ navigator.geolocation.getCurrentPosition(pos=>{
+   const c=pos.coords;
+   if(!Number.isFinite(c.latitude)||!Number.isFinite(c.longitude)||!Number.isFinite(c.accuracy)){
+     statusEl.textContent='El dispositivo no entregó coordenadas válidas.';return;
+   }
+   targetUrl.searchParams.set('gps_lat',String(c.latitude));
+   targetUrl.searchParams.set('gps_lon',String(c.longitude));
+   targetUrl.searchParams.set('gps_acc',String(c.accuracy));
+   targetUrl.searchParams.set('gps_ts',String(Date.now()/1000));
+   location.replace(targetUrl.toString());
+ },err=>{
+   statusEl.className='error';
+   const msg={1:'Permiso de ubicación denegado.',2:'El dispositivo no pudo determinar tu ubicación.',
+      3:'Se agotó el tiempo de espera del GPS.'};
+   statusEl.textContent=msg[err.code]||('Error de ubicación: '+err.message);
+ },{enableHighAccuracy:true,timeout:20000,maximumAge:0});
+});
+</script></body></html>
