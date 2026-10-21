@@ -53,9 +53,9 @@ def validate_location(location, settings):
     except (KeyError, TypeError, ValueError):
         return False, 'No se obtuvo una ubicación válida. Activa GPS y concede el permiso.'
     radius = float(settings['radius_m'])
-    if accuracy > min(100, radius):
+    if accuracy > radius:
         return False, f'Ubicación imprecisa (±{accuracy:.0f} m). Activa ubicación precisa y vuelve a intentar.'
     distance = distance_m(lat, lon, float(settings['latitude']), float(settings['longitude']))
-    if distance + accuracy > float(settings['radius_m']):
+    if distance > radius:
         return False, f'Fuera de la zona autorizada ({radius:.0f} metros). Distancia aproximada: {distance:.0f} m.'
-    return True, f'Ubicación autorizada · distancia aproximada {distance:.0f} m.'
+    return True, f'Ubicación autorizada · distancia aproximada {distance:.0f} m · precisión GPS ±{accuracy:.0f} m · radio {radius:.0f} m.'
