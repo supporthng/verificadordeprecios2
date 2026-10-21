@@ -544,7 +544,7 @@ if file is not None:
         with col_codigo:
             codigo_excel = st.selectbox(
                 "Código de barras", columnas,
-                index=sugerir({"codigobarra", "codigobarras", "codigo", "barcode", "ean", "upc", "sku"}, 0),
+                index=sugerir({"codigobarra", "codigobarras", "barcode", "ean", "upc", "sku"}, 0),
                 key=f"excel_col_codigo_{file.name}_{file.size}",
             )
         with col_nombre:
@@ -577,7 +577,9 @@ if file is not None:
         class ExcelEnMemoria:
             def getvalue(self):
                 return memoria.getvalue()
-        incoming = parse_excel(ExcelEnMemoria())
+        incoming = parse_excel(ExcelEnMemoria(), mapping={
+            "barcode": "barcode", "name": "name", "price": "price"
+        })
 
         st.success(
             f"{len(incoming):,} productos válidos "
@@ -771,7 +773,7 @@ if file is not None:
         ValueError,
     ) as e:
         st.error("No se pudo procesar el Excel o consultar el inventario.")
-        st.caption(f"Tipo de error: {type(e).__name__}. Revisa los registros de Streamlit para más detalles.")
+        st.caption(f"Detalle: {type(e).__name__}: {e}")
 
     except Exception:
         st.error(
