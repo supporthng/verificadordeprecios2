@@ -26,6 +26,12 @@ for key, value in [('geo_form_lat',float(cfg['latitude'])),
                    ('geo_attempt',0),('geo_detecting',False)]:
     st.session_state.setdefault(key,value)
 
+# Aplicar cambios pendientes antes de crear los widgets con esas claves.
+# Streamlit impide modificar una clave después de instanciar su widget.
+geo_pending = st.session_state.pop('geo_pending_coordinates', None)
+if geo_pending is not None:
+    st.session_state['geo_form_lat'], st.session_state['geo_form_lon'] = geo_pending
+
 st.info('Pulsa Detectar mi ubicación desde el dispositivo que está en el establecimiento. El navegador debe solicitar permiso para compartir tu ubicación.')
 if st.button('📍 Detectar mi ubicación', use_container_width=True):
     st.session_state.geo_attempt += 1
@@ -112,8 +118,7 @@ if results:
         format_func=lambda i:results[i]['label'],key='geo_result_index')
     if st.button('📍 Seleccionar resultado',use_container_width=True):
         result=results[selected_index]
-        st.session_state.geo_form_lat=result['lat']
-        st.session_state.geo_form_lon=result['lon']
+        st.session_state.geo_pending_coordinates=(result['lat'],result['lon'])
         st.session_state.geo_location_applied=False
         st.rerun()
 
@@ -129,8 +134,7 @@ if st.button('Aplicar coordenadas',use_container_width=True):
     if match:
         lat0,lon0=map(float,match.groups())
         if -90<=lat0<=90 and -180<=lon0<=180:
-            st.session_state.geo_form_lat=lat0
-            st.session_state.geo_form_lon=lon0
+            st.session_state.geo_pending_coordinates=(lat0,lon0)
             st.rerun()
         else:
             st.error('Las coordenadas están fuera del rango permitido.')
