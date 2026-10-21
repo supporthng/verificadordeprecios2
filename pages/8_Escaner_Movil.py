@@ -29,8 +29,10 @@ if geo_settings['enabled']:
     st.caption('📍 Para consultar precios, permite el acceso a tu ubicación precisa.')
     # Montar el componente GPS desde el primer render. El navegador puede
     # exigir pulsar su propio control azul para conceder el permiso.
-    st.markdown('**👇 Pulsa el botón azul de ubicación que aparece debajo para activar el GPS.**')
-    st.caption('Si el navegador ya autorizó la ubicación, el escáner se abrirá automáticamente.')
+    st.subheader('📍 Activar ubicación')
+    st.info('PASO ÚNICO: pulsa el botón azul de GPS que aparece justo debajo. No se abrirá GitHub.')
+    st.caption('Versión GPS directa · sin enlaces externos · 21/10/2026')
+    st.caption('Al recibir una ubicación válida dentro del radio autorizado, se abrirá el escáner.')
     try:
         # get_geolocation usa navigator.geolocation del navegador y entrega
         # un objeto con coords.latitude, coords.longitude y coords.accuracy.
@@ -40,7 +42,7 @@ if geo_settings['enabled']:
         st.caption(f'Detalle técnico: {type(exc).__name__}: {exc}')
         st.stop()
     if not response:
-        st.info('Esperando ubicación. Si no aparece el permiso, pulsa el botón azul de GPS situado arriba.')
+        st.info('Esperando que pulses el icono azul de GPS. Después acepta el permiso de ubicación.')
         st.stop()
     if isinstance(response, dict) and response.get('error'):
         st.error('El navegador no pudo obtener la ubicación: ' + str(response['error']))
