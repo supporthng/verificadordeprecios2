@@ -1,14 +1,13 @@
 """Consulta móvil con cámara fotográfica y lector Bluetooth HID."""
 import hashlib
+import html
 from io import BytesIO
 import streamlit as st
 import requests
 from datetime import datetime, timedelta, timezone
 import time
 
-st.title('📱 Escáner móvil')
-st.caption('Cámara o lector Bluetooth · utiliza la fuente de datos activa')
-for key, default in {'movil_codigo':'','movil_ultimo':'','movil_producto':None,'movil_job':None,'movil_error':'','movil_foto':''}.items():
+for key, default in {'movil_codigo':'','movil_ultimo':'','movil_producto':None,'movil_job':None,'movil_error':'','movil_foto':'','movil_mostrar_resultado':False,'movil_camera_version':0}.items():
     st.session_state.setdefault(key,default)
 
 def api(method,table,params=None,payload=None):
@@ -35,6 +34,7 @@ def productos_locales():
 def consultar(code):
     code=str(code).strip()
     if not code:return
+    st.session_state.movil_mostrar_resultado=True
     st.session_state.movil_ultimo=code
     st.session_state.movil_producto=None
     st.session_state.movil_job=None
@@ -63,29 +63,55 @@ def consultar(code):
     except Exception as exc:
         st.session_state.movil_error='No se pudo consultar la fuente seleccionada: '+str(exc)
 
-tab1,tab2=st.tabs(['📷 Cámara','⌨️ Bluetooth / Manual'])
-with tab1:
-    st.caption('Fotografía el código con buena iluminación. La consulta comienza al reconocerlo.')
-    photo=st.camera_input('Tomar foto del código de barras',key='movil_camara')
-    if photo:
-        data=photo.getvalue(); digest=hashlib.sha256(data).hexdigest()
-        if digest!=st.session_state.movil_foto:
-            st.session_state.movil_foto=digest
-            try:
-                import zxingcpp
-                from PIL import Image,ImageOps
-                img=ImageOps.exif_transpose(Image.open(BytesIO(data))).convert('RGB')
-                found=zxingcpp.read_barcodes(img)
-                if found:
-                    consultar(found[0].text)
-                    st.success('Código leído: '+found[0].text)
-                else: st.warning('No se reconoció el código. Acerca la cámara y repite la foto.')
-            except ImportError: st.error('Falta instalar zxing-cpp (requirements.txt).')
-            except Exception: st.error('No se pudo procesar la fotografía.')
-with tab2:
-    st.caption('Empareja el lector Bluetooth en modo teclado HID y configura sufijo Enter.')
-    st.text_input('Código de barras',key='movil_codigo',placeholder='Escanea o escribe el código',on_change=lambda:consultar(st.session_state.movil_codigo))
-    if st.button('Consultar',use_container_width=True): consultar(st.session_state.movil_codigo)
+st.markdown("""<style>
+/* El resultado utiliza siempre colores claros, incluso con tema oscuro. */
+.mobile-result {background:#f3f8ff;color:#092851;border-radius:18px;padding:20px 15px;margin:14px 0 22px;box-sizing:border-box}
+.mobile-result .product-label {font-size:14px;font-weight:800;letter-spacing:.07em;color:#436186}
+.mobile-result .product-name {font-size:clamp(27px,7vw,48px);font-weight:900;line-height:1.15;overflow-wrap:anywhere;margin:10px 0}
+.mobile-result .product-code {font-size:15px;color:#526986;margin-bottom:18px;overflow-wrap:anywhere}
+.mobile-result .price-panel {background:linear-gradient(110deg,#0b60df,#0649bc);border-radius:15px;padding:20px 14px;color:white;text-align:center}
+.mobile-result .price-label {font-size:15px;font-weight:800;letter-spacing:.04em;color:white}
+.mobile-result .price-value {font-size:clamp(38px,10vw,70px);font-weight:900;line-height:1.2;color:white;overflow-wrap:anywhere}
+.mobile-result .missing {font-size:clamp(24px,7vw,42px);font-weight:900;color:#b91c1c;text-align:center;padding:24px 4px}
+@media(max-width:650px){.mobile-result{padding:15px 10px}.mobile-result .price-panel{padding:20px 8px}}
+</style>""",unsafe_allow_html=True)
+
+def reiniciar():
+    st.session_state.movil_mostrar_resultado=False
+    st.session_state.movil_ultimo=''
+    st.session_state.movil_producto=None
+    st.session_state.movil_job=None
+    st.session_state.movil_error=''
+    st.session_state.movil_foto=''
+    st.session_state.movil_camera_version+=1
+
+if not st.session_state.movil_mostrar_resultado:
+    st.title('📱 Consulta Móvil')
+    tab1,tab2=st.tabs(['📷 Cámara','⌨️ Bluetooth / Manual'])
+    with tab1:
+        st.caption('Fotografía el código de barras para consultar el precio.')
+        photo=st.camera_input('Tomar foto del código de barras',key=f"movil_camara_{st.session_state.movil_camera_version}")
+        if photo:
+            data=photo.getvalue(); digest=hashlib.sha256(data).hexdigest()
+            if digest!=st.session_state.movil_foto:
+                st.session_state.movil_foto=digest
+                try:
+                    import zxingcpp
+                    from PIL import Image,ImageOps
+                    img=ImageOps.exif_transpose(Image.open(BytesIO(data))).convert('RGB')
+                    found=zxingcpp.read_barcodes(img)
+                    if found:
+                        consultar(found[0].text)
+                        st.rerun()
+                    else: st.warning('No se reconoció el código. Acerca la cámara y repite la foto.')
+                except ImportError: st.error('Falta instalar zxing-cpp (requirements.txt).')
+                except Exception: st.error('No se pudo procesar la fotografía.')
+    with tab2:
+        st.caption('Lector Bluetooth HID con sufijo Enter, o entrada manual.')
+        st.text_input('Código de barras',key='movil_codigo',placeholder='Escanea o escribe el código',on_change=lambda:consultar(st.session_state.movil_codigo))
+        if st.button('Consultar',use_container_width=True):
+            consultar(st.session_state.movil_codigo)
+            st.rerun()
 
 @st.fragment(run_every='2s')
 def resultado():
@@ -111,16 +137,26 @@ def resultado():
             except Exception:
                 st.session_state.movil_error='No se pudo obtener la respuesta del conector.'
                 st.session_state.movil_job=None
-    if st.session_state.movil_error: st.error(st.session_state.movil_error)
+    if not st.session_state.movil_mostrar_resultado:
+        return
+    if st.session_state.movil_error:
+        st.error(st.session_state.movil_error)
     elif st.session_state.movil_ultimo:
         product=st.session_state.movil_producto
         if product:
-            st.success('PRODUCTO ENCONTRADO')
-            st.subheader(str(product.get('name') or 'Sin descripción'))
-            try: st.metric('PRECIO',f"RD$ {float(product.get('price')):,.2f}")
-            except (ValueError,TypeError): st.metric('PRECIO',str(product.get('price') or 'No disponible'))
-            st.caption('Código: '+str(product.get('barcode') or st.session_state.movil_ultimo))
+            name=html.escape(str(product.get('name') or 'Sin descripción'))
+            barcode=html.escape(str(product.get('barcode') or st.session_state.movil_ultimo))
+            try: price=f"RD$ {float(product.get('price')):,.2f}"
+            except (ValueError,TypeError): price=html.escape(str(product.get('price') or 'No disponible'))
+            st.markdown('<div class="mobile-result"><div class="product-label">PRODUCTO</div>'
+                        f'<div class="product-name">{name}</div><div class="product-code">Código: {barcode}</div>'
+                        '<div class="price-panel"><div class="price-label">PRECIO DE VENTA</div>'
+                        f'<div class="price-value">{price}</div></div></div>',unsafe_allow_html=True)
         elif not st.session_state.movil_job:
-            st.warning('PRODUCTO NO ENCONTRADO')
-            st.caption('Código: '+st.session_state.movil_ultimo)
+            barcode=html.escape(st.session_state.movil_ultimo)
+            st.markdown(f'<div class="mobile-result"><div class="missing">PRODUCTO NO ENCONTRADO</div><div class="product-code">Código: {barcode}</div></div>',unsafe_allow_html=True)
 resultado()
+if st.session_state.movil_mostrar_resultado:
+    if st.button('📷 Escanear otro producto',type='primary',use_container_width=True):
+        reiniciar()
+        st.rerun()
