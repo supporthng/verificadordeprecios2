@@ -18,7 +18,7 @@ FOCO_JS = r"""
   const SELECTOR = 'div[data-testid="stTextInput"] input';
   function enfocar() {
     const input = document.querySelector(SELECTOR);
-    if (!input || input.disabled || input.readOnly || input.offsetParent === null) return;
+    if (!input || input.disabled || input.readOnly) return;
     // No interrumpir al usuario si está escribiendo en otro control.
     const activo = document.activeElement;
     if (activo && activo !== document.body && activo !== input &&
@@ -723,7 +723,7 @@ def check_external_result():
         st.session_state.result_time = time.monotonic()
 
 
-@st.fragment(run_every=0.25)
+@st.fragment(run_every=1.0)
 def verificador():
     # Evitar mostrar resultados de una fuente distinta si el administrador la cambia.
     try:
@@ -755,6 +755,21 @@ def verificador():
         st.session_state.result_time = None
         # El widget puede no existir cuando se muestra un resultado.
         # Streamlit limpia automaticamente su estado al ocultarlo.
+
+    # Mantener el textbox nativo montado en TODOS los estados, incluso mientras
+    # se muestra un producto o un código inexistente. Al desmontarlo, Streamlit
+    # pierde el foco y puede descartar la siguiente lectura del escáner.
+    st.text_input(
+        "Código de barras",
+        key="search_input",
+        on_change=buscar_producto,
+        label_visibility="collapsed",
+        placeholder="Escanea o escribe el código y pulsa Enter",
+    )
+    if "unsafe_allow_javascript" in inspect.signature(st.html).parameters:
+        st.html(FOCO_JS, unsafe_allow_javascript=True)
+    else:
+        st.warning("El enfoque automático requiere una versión de Streamlit compatible con st.html.")
 
     product = st.session_state.current_product
 
@@ -838,28 +853,6 @@ def verificador():
         if st.session_state.not_found:
             st.error('PRODUCTO NO ENCONTRADO')
 
-        lado_izquierdo, campo_central, lado_derecho = st.columns([1, 2, 1])
-        with campo_central:
-            st.text_input(
-                "Código de barras",
-                key="search_input",
-                on_change=buscar_producto,
-                label_visibility="collapsed",
-                placeholder="Escanea o escribe el código y pulsa Enter",
-            )
-
-        # La caja de lectura permanece oculta, pero el lector escribe en ella con el foco automático.
-
-        # st.html ejecuta JS en la página (no dentro de un iframe) en versiones
-        # de Streamlit que admiten unsafe_allow_javascript.
-        if "unsafe_allow_javascript" in inspect.signature(st.html).parameters:
-            st.html(FOCO_JS, unsafe_allow_javascript=True)
-        else:
-            st.warning(
-                "El cursor automático requiere una versión reciente de Streamlit "
-                "que admita st.html(unsafe_allow_javascript=True). "
-                "Actualiza Streamlit en requirements.txt."
-            )
 
         logo = cargar_logo_negocio()
         if logo:
