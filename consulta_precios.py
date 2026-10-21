@@ -109,9 +109,52 @@ def cargar_logo_negocio():
         pass
     return None
 
+@st.cache_data(ttl=60, show_spinner=False)
+def cargar_qr_movil():
+    """Obtiene la imagen QR configurada, desde el bucket privado existente."""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        return None
+    try:
+        response = requests.get(
+            f"{SUPABASE_URL}/storage/v1/object/logo-negocio/qr-movil.png",
+            headers={
+                "apikey": SUPABASE_SERVICE_ROLE_KEY,
+                "Authorization": "Bearer " + SUPABASE_SERVICE_ROLE_KEY,
+            },
+            timeout=8,
+        )
+        if response.status_code == 200 and response.headers.get("content-type", "").startswith("image/"):
+            return response.content
+    except requests.RequestException:
+        pass
+    return None
+
 
 CSS = """
 <style>
+.mobile-brand-pair {
+    display: flex; justify-content: center; align-items: center;
+    gap: 26px; flex-wrap: wrap; width: fit-content; max-width: 100%;
+    margin: 14px auto 8px; padding: 18px 22px;
+    border-radius: 18px; background: #fff;
+    box-shadow: 0 8px 25px rgba(15, 40, 85, .08);
+}
+.mobile-brand-logo, .mobile-brand-qr {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.mobile-brand-logo img { max-width: 220px; max-height: 155px; width: auto; height: auto; object-fit: contain; }
+.mobile-brand-qr img { width: min(170px, 38vw); height: auto; max-height: 170px; object-fit: contain; }
+.mobile-brand-qr-caption {
+    background: #103a70; color: #fff; font-size: 12px;
+    font-weight: 800; text-align: center; padding: 8px 12px;
+    border-radius: 9px; margin-top: 8px; letter-spacing: .2px;
+}
+@media (max-width: 540px) {
+    .mobile-brand-pair { gap: 12px; padding: 12px; }
+    .mobile-brand-logo img { max-width: 150px; max-height: 125px; }
+    .mobile-brand-qr img { width: min(140px, 38vw); }
+    .mobile-brand-qr-caption { font-size: 10px; padding: 7px 8px; }
+}
 .stApp { background: #f4f7fc; }
 .block-container {
     max-width: 100%;
@@ -844,28 +887,43 @@ def verificador():
                 "Actualiza Streamlit en requirements.txt."
             )
 
+        # Identidad visual: logo y QR centrados como un único conjunto.
         logo = cargar_logo_negocio()
-        if logo:
-            # El logo se centra respecto a TODA la pantalla, no respecto
-            # a columnas de Streamlit que varían con el ancho del dispositivo.
+        qr_movil = cargar_qr_movil()
+
+        def imagen_embebida(datos, dimensiones):
+            if not datos:
+                return None
             try:
-                with Image.open(BytesIO(logo)) as original:
-                    imagen = ImageOps.contain(original.convert("RGBA"), (220, 130))
+                with Image.open(BytesIO(datos)) as original:
+                    imagen = ImageOps.contain(original.convert("RGBA"), dimensiones)
                     salida = BytesIO()
                     imagen.save(salida, format="PNG")
-                    imagen_base64 = base64.b64encode(salida.getvalue()).decode("ascii")
-                st.markdown(
-                    '<div style="width:100%;display:flex;justify-content:center;'
-                    'align-items:center;margin:10px auto 0;">'
-                    '<img alt="Logo de la empresa" '
-                    'style="display:block;width:auto;max-width:220px;'
-                    'height:auto;max-height:130px;object-fit:contain;" '
-                    f'src="data:image/png;base64,{imagen_base64}">'
-                    '</div>',
-                    unsafe_allow_html=True,
-                )
+                    return base64.b64encode(salida.getvalue()).decode("ascii")
             except (OSError, ValueError):
-                pass
+                return None
+
+        logo_b64 = imagen_embebida(logo, (220, 155))
+        qr_b64 = imagen_embebida(qr_movil, (190, 190))
+        if logo_b64 or qr_b64:
+            tarjetas = []
+            if logo_b64:
+                tarjetas.append(
+                    '<div class="mobile-brand-logo">'
+                    f'<img alt="Logo del negocio" src="data:image/png;base64,{logo_b64}">'
+                    '</div>'
+                )
+            if qr_b64:
+                tarjetas.append(
+                    '<div class="mobile-brand-qr">'
+                    f'<img alt="Código QR de consulta móvil" src="data:image/png;base64,{qr_b64}">'
+                    '<div class="mobile-brand-qr-caption">📱 CONSULTA DESDE TU CELULAR</div>'
+                    '</div>'
+                )
+            st.markdown(
+                '<div class="mobile-brand-pair">' + ''.join(tarjetas) + '</div>',
+                unsafe_allow_html=True,
+            )
 
 
 

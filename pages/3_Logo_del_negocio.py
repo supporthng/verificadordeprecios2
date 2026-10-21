@@ -99,6 +99,62 @@ if archivo is not None:
             st.error(f"No se pudo guardar el logo en Supabase: {exc}")
 
 
+
+st.divider()
+st.subheader("📱 Código QR para consulta desde el celular")
+st.caption(
+    "Sube una imagen PNG o JPG de tu código QR. Se mostrará centrada junto "
+    "al logo en la pantalla de Consulta de Precios. "
+    "El QR debe apuntar a la dirección pública de Consulta Móvil."
+)
+archivo_qr = st.file_uploader(
+    "Imagen del código QR (PNG o JPG)",
+    type=["png", "jpg", "jpeg"],
+    key="qr_consulta_movil",
+)
+if archivo_qr is not None:
+    try:
+        with Image.open(archivo_qr) as imagen_original:
+            imagen_qr = imagen_original.convert("RGB")
+            imagen_qr.thumbnail((900, 900))
+            salida_qr = BytesIO()
+            imagen_qr.save(salida_qr, format="PNG", optimize=True)
+            datos_qr = salida_qr.getvalue()
+        st.image(datos_qr, caption="Vista previa del QR", width=210)
+        if st.button("Guardar código QR", type="primary", key="guardar_qr_movil"):
+            # El bucket logo-negocio es privado; reutilizarlo evita migraciones SQL.
+            estado = requests.get(
+                f"{url}/storage/v1/bucket/logo-negocio", headers=headers, timeout=15
+            )
+            if estado.status_code == 404:
+                creado = requests.post(
+                    f"{url}/storage/v1/bucket",
+                    headers={**headers, "Content-Type": "application/json"},
+                    json={"id": "logo-negocio", "name": "logo-negocio", "public": False},
+                    timeout=15,
+                )
+                if not creado.ok:
+                    st.error(f"No se pudo crear el almacenamiento (HTTP {creado.status_code}).")
+                    st.stop()
+            elif not estado.ok:
+                st.error(f"No se pudo comprobar el almacenamiento (HTTP {estado.status_code}).")
+                st.stop()
+            guardado = requests.post(
+                f"{url}/storage/v1/object/logo-negocio/qr-movil.png",
+                headers={**headers, "Content-Type": "image/png", "x-upsert": "true"},
+                data=datos_qr,
+                timeout=25,
+            )
+            if guardado.ok:
+                st.success("Código QR guardado. Aparecerá junto al logo en Consulta de Precios.")
+            else:
+                st.error(f"No se pudo guardar el QR (HTTP {guardado.status_code}): {guardado.text[:350]}")
+    except (UnidentifiedImageError, OSError, ValueError):
+        st.error("La imagen del QR no es válida.")
+    except requests.RequestException as exc:
+        st.error(f"No se pudo comunicar con Supabase: {exc}")
+
+
 st.divider()
 st.subheader("Fotografías de productos")
 st.caption("Sube una imagen para un código de barras. Tendrá prioridad sobre las imágenes encontradas automáticamente.")
