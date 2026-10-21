@@ -13,7 +13,7 @@ if not st.session_state.get('admin_authenticated', False):
     st.stop()
 
 st.title('📍 Ubicación autorizada · Consulta Móvil')
-st.caption('Centro del establecimiento · radio permitido: 100 metros.')
+st.caption('Configura el centro del establecimiento y la distancia máxima autorizada.')
 try:
     cfg = get_settings()
 except Exception:
@@ -23,6 +23,7 @@ except Exception:
 for key, value in [('geo_form_lat',float(cfg['latitude'])),
                    ('geo_form_lon',float(cfg['longitude'])),
                    ('geo_form_enabled',bool(cfg['enabled'])),
+                   ('geo_form_radius',int(cfg['radius_m'])),
                    ('geo_attempt',0),('geo_detecting',False)]:
     st.session_state.setdefault(key,value)
 
@@ -74,6 +75,8 @@ if st.session_state.get('geo_location_applied'):
         st.warning('Precisión GPS baja. Intenta nuevamente cerca de una ventana o al aire libre.')
 
 st.toggle('Exigir ubicación para Consulta Móvil',key='geo_form_enabled')
+st.number_input('Distancia máxima permitida (metros)', min_value=10, max_value=10000,
+                step=10, key='geo_form_radius', help='Radio alrededor del establecimiento para Consulta Móvil.')
 st.number_input('Latitud',min_value=-90.0,max_value=90.0,step=0.000001,format='%.7f',key='geo_form_lat')
 st.number_input('Longitud',min_value=-180.0,max_value=180.0,step=0.000001,format='%.7f',key='geo_form_lon')
 st.divider()
@@ -172,7 +175,7 @@ if lat==0 and lon==0:
     st.info('Selecciona un resultado, detecta tu ubicación o introduce las coordenadas.')
 else:
     st.map(pd.DataFrame([{'lat':lat,'lon':lon}]),latitude='lat',longitude='lon',zoom=16,size=140)
-    st.caption('Centro seleccionado. La restricción de acceso móvil seguirá siendo de 100 metros. Puedes ajustar la latitud y longitud en los campos superiores.')
+    st.caption('Centro seleccionado. La restricción de acceso móvil utilizará el radio configurado arriba. Puedes ajustar la latitud y longitud en los campos superiores.')
     st.link_button('Abrir punto en Google Maps',f'https://www.google.com/maps?q={lat:.7f},{lon:.7f}',use_container_width=True)
 
 if st.button('Guardar ubicación',type='primary',use_container_width=True):
@@ -182,15 +185,17 @@ if st.button('Guardar ubicación',type='primary',use_container_width=True):
         if latitude == 0 and longitude == 0:
             st.error('Selecciona primero la ubicación del establecimiento.')
         else:
-            save_settings(latitude, longitude, st.session_state.geo_form_enabled)
+            save_settings(latitude, longitude, st.session_state.geo_form_enabled,
+                          st.session_state.geo_form_radius)
             saved = get_settings()
             if (abs(float(saved['latitude']) - latitude) > 0.0000001
                 or abs(float(saved['longitude']) - longitude) > 0.0000001
-                or bool(saved['enabled']) != bool(st.session_state.geo_form_enabled)):
+                or bool(saved['enabled']) != bool(st.session_state.geo_form_enabled)
+                or int(saved['radius_m']) != int(st.session_state.geo_form_radius)):
                 st.error('Supabase no confirmó los valores guardados. Revisa los permisos de la tabla mobile_geo_settings.')
             else:
                 st.success('Ubicación guardada y verificada en Supabase.')
-                st.caption(f'Latitud: {latitude:.7f} · Longitud: {longitude:.7f} · Radio: 100 metros')
+                st.caption(f'Latitud: {latitude:.7f} · Longitud: {longitude:.7f} · Radio: {int(st.session_state.geo_form_radius)} metros')
     except Exception as exc:
         st.error('No se pudo guardar la ubicación en Supabase.')
         st.code(str(exc))

@@ -24,12 +24,15 @@ def get_settings():
         raise RuntimeError('No existe configuración geográfica. Ejecuta INSTALAR_GEO_MOVIL.sql.')
     return rows[0]
 
-def save_settings(latitude, longitude, enabled=True):
+def save_settings(latitude, longitude, enabled=True, radius_m=100):
+    radius_m = int(radius_m)
+    if not 10 <= radius_m <= 10000:
+        raise ValueError("El radio permitido debe estar entre 10 y 10000 metros.")
     if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
         raise ValueError('Coordenadas fuera de rango.')
     _request('POST', {'on_conflict': 'id'},
              {'id': 1, 'latitude': latitude, 'longitude': longitude,
-              'radius_m': 100, 'enabled': bool(enabled)})
+              'radius_m': radius_m, 'enabled': bool(enabled)})
 
 def distance_m(lat1, lon1, lat2, lon2):
     p1, p2 = math.radians(lat1), math.radians(lat2)
@@ -49,9 +52,10 @@ def validate_location(location, settings):
             raise ValueError()
     except (KeyError, TypeError, ValueError):
         return False, 'No se obtuvo una ubicación válida. Activa GPS y concede el permiso.'
-    if accuracy > 100:
+    radius = float(settings['radius_m'])
+    if accuracy > min(100, radius):
         return False, f'Ubicación imprecisa (±{accuracy:.0f} m). Activa ubicación precisa y vuelve a intentar.'
     distance = distance_m(lat, lon, float(settings['latitude']), float(settings['longitude']))
     if distance + accuracy > float(settings['radius_m']):
-        return False, 'Fuera de la zona autorizada (100 metros). Acércate al establecimiento.'
+        return False, f'Fuera de la zona autorizada ({radius:.0f} metros). Distancia aproximada: {distance:.0f} m.'
     return True, f'Ubicación autorizada · distancia aproximada {distance:.0f} m.'
