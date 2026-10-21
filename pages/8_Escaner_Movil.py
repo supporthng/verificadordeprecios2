@@ -27,12 +27,16 @@ if geo_settings['enabled']:
     # No se autoriza el escáner hasta recibir coordenadas verificables.
     st.session_state['mobile_geo_allowed'] = False
     st.caption('📍 Para consultar precios, permite el acceso a tu ubicación precisa.')
-    # Montar el componente GPS desde el primer render. El navegador puede
-    # exigir pulsar su propio control azul para conceder el permiso.
-    st.subheader('📍 Activar ubicación')
-    st.info('PASO ÚNICO: pulsa el botón azul de GPS que aparece justo debajo. No se abrirá GitHub.')
-    st.caption('Versión GPS directa · sin enlaces externos · 21/10/2026')
-    st.caption('Al recibir una ubicación válida dentro del radio autorizado, se abrirá el escáner.')
+    st.session_state.setdefault('mobile_geo_attempt', 0)
+    st.session_state.setdefault('mobile_geo_requesting', False)
+    if st.button('📍 Comprobar mi ubicación', key='mobile_geo_retry', use_container_width=True):
+        st.session_state.mobile_geo_attempt += 1
+        st.session_state.mobile_geo_requesting = True
+        st.rerun()
+    if not st.session_state.mobile_geo_requesting:
+        st.info('Pulsa Comprobar mi ubicación y acepta el permiso de localización del navegador.')
+        st.stop()
+    st.info('👇 **Pulsa el botón azul de ubicación que aparece debajo para activar el GPS y continuar.**')
     try:
         # get_geolocation usa navigator.geolocation del navegador y entrega
         # un objeto con coords.latitude, coords.longitude y coords.accuracy.
@@ -42,7 +46,7 @@ if geo_settings['enabled']:
         st.caption(f'Detalle técnico: {type(exc).__name__}: {exc}')
         st.stop()
     if not response:
-        st.info('Esperando que pulses el icono azul de GPS. Después acepta el permiso de ubicación.')
+        st.info('Esperando respuesta del GPS. Si no aparece el permiso, comprueba la configuración de ubicación del sitio.')
         st.stop()
     if isinstance(response, dict) and response.get('error'):
         st.error('El navegador no pudo obtener la ubicación: ' + str(response['error']))
