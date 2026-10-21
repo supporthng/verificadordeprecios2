@@ -54,8 +54,7 @@ if st.session_state.geo_detecting:
             accuracy = float(location.get('accuracy') or 0)
             if not all(map(math.isfinite,(lat,lon,accuracy))) or not (-90 <= lat <= 90 and -180 <= lon <= 180):
                 raise ValueError('Coordenadas inválidas')
-            st.session_state.geo_form_lat = lat
-            st.session_state.geo_form_lon = lon
+            st.session_state.geo_pending_coordinates = (lat, lon)
             st.session_state.geo_accuracy = accuracy
             st.session_state.geo_detecting = False
             st.session_state.geo_location_applied = True
@@ -141,6 +140,32 @@ if st.button('Aplicar coordenadas',use_container_width=True):
     else:
         st.warning('Este enlace no contiene coordenadas explícitas. Abre el lugar en Google Maps, haz clic derecho sobre el marcador y copia las coordenadas.')
 
+st.subheader('Nombre o dirección de las coordenadas')
+st.caption('La dirección se consulta en OpenStreetMap sin facturación. No es posible obtener el nombre comercial exclusivo de Google Maps sin su API.')
+if st.button('🔎 Identificar dirección de estas coordenadas', use_container_width=True):
+    try:
+        latitude = float(st.session_state.geo_form_lat)
+        longitude = float(st.session_state.geo_form_lon)
+        if latitude == 0 and longitude == 0:
+            st.warning('Primero selecciona unas coordenadas válidas.')
+        else:
+            response = requests.get(
+                'https://nominatim.openstreetmap.org/reverse',
+                params={'lat': latitude, 'lon': longitude, 'format': 'json', 'zoom': 18, 'addressdetails': 1},
+                headers={'User-Agent': 'SistemaConsultaPrecios/1.0 (reverse-geocoding)'},
+                timeout=15,
+            )
+            response.raise_for_status()
+            place = response.json()
+            st.session_state.geo_resolved_name = place.get('name') or place.get('display_name') or 'Sin dirección registrada'
+            st.session_state.geo_resolved_point = (latitude, longitude)
+    except (requests.RequestException, ValueError, TypeError):
+        st.error('No se pudo consultar el nombre o dirección. Puedes guardar las coordenadas igualmente.')
+if st.session_state.get('geo_resolved_point') == (
+    float(st.session_state.geo_form_lat), float(st.session_state.geo_form_lon)
+):
+    st.info('📍 ' + st.session_state.get('geo_resolved_name', 'Sin dirección registrada'))
+
 st.subheader('Vista previa del punto autorizado')
 lat,lon=float(st.session_state.geo_form_lat),float(st.session_state.geo_form_lon)
 if lat==0 and lon==0:
@@ -152,7 +177,20 @@ else:
 
 if st.button('Guardar ubicación',type='primary',use_container_width=True):
     try:
-        save_settings(st.session_state.geo_form_lat,st.session_state.geo_form_lon,st.session_state.geo_form_enabled)
-        st.success('Ubicación guardada correctamente.')
-    except Exception:
-        st.error('No se pudo guardar en Supabase.')
+        latitude = float(st.session_state.geo_form_lat)
+        longitude = float(st.session_state.geo_form_lon)
+        if latitude == 0 and longitude == 0:
+            st.error('Selecciona primero la ubicación del establecimiento.')
+        else:
+            save_settings(latitude, longitude, st.session_state.geo_form_enabled)
+            saved = get_settings()
+            if (abs(float(saved['latitude']) - latitude) > 0.0000001
+                or abs(float(saved['longitude']) - longitude) > 0.0000001
+                or bool(saved['enabled']) != bool(st.session_state.geo_form_enabled)):
+                st.error('Supabase no confirmó los valores guardados. Revisa los permisos de la tabla mobile_geo_settings.')
+            else:
+                st.success('Ubicación guardada y verificada en Supabase.')
+                st.caption(f'Latitud: {latitude:.7f} · Longitud: {longitude:.7f} · Radio: 100 metros')
+    except Exception as exc:
+        st.error('No se pudo guardar la ubicación en Supabase.')
+        st.code(str(exc))
