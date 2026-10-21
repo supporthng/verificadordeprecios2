@@ -3,6 +3,8 @@ import math
 import streamlit as st
 from mobile_geofence import get_settings, save_settings
 from streamlit_geolocation import streamlit_geolocation
+import folium
+from streamlit_folium import st_folium
 
 if not st.session_state.get('admin_authenticated', False):
     st.error('Esta configuración requiere iniciar sesión como administrador.')
@@ -67,11 +69,34 @@ if st.session_state.get('geo_location_applied'):
 st.toggle('Exigir ubicación para Consulta Móvil',key='geo_form_enabled')
 st.number_input('Latitud',min_value=-90.0,max_value=90.0,step=0.000001,format='%.7f',key='geo_form_lat')
 st.number_input('Longitud',min_value=-180.0,max_value=180.0,step=0.000001,format='%.7f',key='geo_form_lon')
+st.divider()
+st.subheader('Seleccionar establecimiento en el mapa')
+st.caption('Toca el mapa para colocar el marcador. Puedes ampliar, mover el mapa y seleccionar el punto exacto. Después pulsa Guardar ubicación.')
+lat, lon = float(st.session_state.geo_form_lat), float(st.session_state.geo_form_lon)
+# Evitar centrar el mapa en 0,0 si todavía no se configuró el establecimiento.
+center = [lat, lon] if (lat != 0 or lon != 0) else [18.47, -69.93]
+m = folium.Map(location=center, zoom_start=17 if (lat != 0 or lon != 0) else 11, control_scale=True)
+if lat != 0 or lon != 0:
+    folium.Marker([lat, lon], tooltip='Ubicación seleccionada', icon=folium.Icon(color='blue')).add_to(m)
+    folium.Circle([lat, lon], radius=100, color='#1677cc', fill=True,
+                  fill_opacity=0.12, tooltip='Radio autorizado: 100 m').add_to(m)
+selected = st_folium(m, height=380, width=None, key='geo_map_selector',
+                     returned_objects=['last_clicked'])
+clicked = (selected or {}).get('last_clicked')
+if clicked:
+    new_lat, new_lon = float(clicked['lat']), float(clicked['lng'])
+    click_id = (round(new_lat, 7), round(new_lon, 7))
+    if st.session_state.get('geo_last_map_click') != click_id:
+        st.session_state.geo_last_map_click = click_id
+        st.session_state.geo_form_lat = new_lat
+        st.session_state.geo_form_lon = new_lon
+        st.session_state.geo_location_applied = False
+        st.rerun()
+st.caption('El mapa permite seleccionar manualmente la ubicación sin GPS. Detectar mi ubicación sigue requiriendo permiso del navegador y HTTPS.')
+
 if st.button('Guardar ubicación',type='primary',use_container_width=True):
     try:
         save_settings(st.session_state.geo_form_lat,st.session_state.geo_form_lon,st.session_state.geo_form_enabled)
         st.success('Ubicación guardada correctamente.')
     except Exception:
         st.error('No se pudo guardar en Supabase.')
-st.map([{'lat':st.session_state.geo_form_lat,'lon':st.session_state.geo_form_lon}],zoom=16)
-st.caption('Requiere HTTPS, permiso del navegador y ubicación precisa. Algunos navegadores bloquean geolocalización dentro de componentes incrustados.')

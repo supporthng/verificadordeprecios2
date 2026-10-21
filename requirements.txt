@@ -7,3 +7,5 @@ cryptography>=42,<48
 
 zxing-cpp>=2.2,<4
 streamlit-geolocation>=0.0.10,<1
+folium>=0.17,<1
+streamlit-folium>=0.23,<1
