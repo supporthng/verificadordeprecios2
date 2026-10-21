@@ -15,7 +15,7 @@ import streamlit as st
 FOCO_JS = r"""
 <script>
 (() => {
-  const SELECTOR = 'div[data-testid="stTextInput"] input';
+  const SELECTOR = 'div[data-testid="stTextInput"] input[aria-label="Código de barras"]';
   function enfocar() {
     const input = document.querySelector(SELECTOR);
     if (!input || input.disabled || input.readOnly) return;
@@ -578,10 +578,17 @@ CSS += """<style>
 st.markdown(CSS, unsafe_allow_html=True)
 
 
-@st.cache_data(ttl=10, show_spinner=False)
-def catalog():
-    from inventarios import active_catalog
-    return active_catalog()
+def buscar_producto_supabase(codigo):
+    """Consulta la misma tabla `products` usada por Listado de Productos.
+
+    No consulta `price_inventory_items`: ese catálogo es distinto y puede estar vacío
+    aunque Administración encuentre el producto en `products`.
+    """
+    rows = admin_api(
+        "GET", "products",
+        params={"select": "barcode,name,price", "barcode": "eq." + codigo, "limit": "1"},
+    )
+    return rows[0] if rows else None
 
 
 
@@ -613,14 +620,13 @@ def buscar_producto():
     try:
         mode, source_id = active_source()
         if mode == "local":
-            df = catalog()
-            if df.empty:
-                raise RuntimeError('El inventario activo no contiene productos o no hay un inventario seleccionado.')
-            hits = df[df["barcode"].astype(str).str.strip() == query].head(1)
-            if hits.empty:
+            # Misma fuente que Administración > Listado de Productos (tabla products).
+            # Consultar el código exacto como texto, preservando ceros iniciales.
+            product = buscar_producto_supabase(query)
+            if product is None:
                 st.session_state.not_found = True
             else:
-                st.session_state.current_product = hits.iloc[0].to_dict()
+                st.session_state.current_product = product
             st.session_state.result_time = time.monotonic()
         elif mode == "google":
             from google_oauth_source import config as google_config, catalog as google_catalog
