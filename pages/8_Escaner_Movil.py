@@ -7,7 +7,7 @@ import requests
 from datetime import datetime, timedelta, timezone
 import time
 
-for key, default in {'movil_codigo':'','movil_ultimo':'','movil_producto':None,'movil_job':None,'movil_error':'','movil_foto':'','movil_mostrar_resultado':False,'movil_camera_version':0}.items():
+for key, default in {'movil_codigo':'','movil_ultimo':'','movil_producto':None,'movil_job':None,'movil_error':'','movil_foto':'','movil_mostrar_resultado':False,'movil_camera_version':0,'movil_resultado_desde':None}.items():
     st.session_state.setdefault(key,default)
 
 def api(method,table,params=None,payload=None):
@@ -39,6 +39,7 @@ def consultar(code):
     st.session_state.movil_producto=None
     st.session_state.movil_job=None
     st.session_state.movil_error=''
+    st.session_state.movil_resultado_desde=None
     try:
         settings=api('GET','price_source_settings',{'id':'eq.1','select':'source_type'})
         if not settings: raise RuntimeError('Configura primero la fuente de datos.')
@@ -60,6 +61,7 @@ def consultar(code):
             return
         else: raise RuntimeError('Fuente desconocida.')
         st.session_state.movil_producto=next((r for r in rows if str(r.get('barcode','')).strip()==code),None)
+        st.session_state.movil_resultado_desde=time.monotonic()
     except Exception as exc:
         st.session_state.movil_error='No se pudo consultar la fuente seleccionada: '+str(exc)
 
@@ -73,6 +75,13 @@ st.markdown("""<style>
 .mobile-result .price-label {font-size:15px;font-weight:800;letter-spacing:.04em;color:white}
 .mobile-result .price-value {font-size:clamp(38px,10vw,70px);font-weight:900;line-height:1.2;color:white;overflow-wrap:anywhere}
 .mobile-result .missing {font-size:clamp(24px,7vw,42px);font-weight:900;color:#b91c1c;text-align:center;padding:24px 4px}
+/* Estado sin producto: reproduce la pantalla de espera del verificador principal. */
+.mobile-not-found {background:#f3f8ff;color:#102b50;border-radius:18px;padding:20px 12px 28px;text-align:center;margin:14px 0 22px}
+.mobile-not-found .barcode-card {background:#fff1f2;border-radius:16px;padding:18px 14px;max-width:440px;margin:0 auto 24px}
+.mobile-not-found .barcode-bars {height:118px;width:100%;background:repeating-linear-gradient(90deg,#b91c1c 0px,#b91c1c 3px,transparent 3px,transparent 6px,#b91c1c 6px,#b91c1c 8px,transparent 8px,transparent 12px);}
+.mobile-not-found .barcode-caption {font-size:13px;color:#102b50;margin-top:10px}
+.mobile-not-found .scan-title {font-size:clamp(24px,6vw,40px);font-weight:900;color:#b91c1c;line-height:1.15;margin:10px auto}
+.mobile-not-found .scan-hint {font-size:clamp(14px,3.7vw,19px);color:#7b8ba5;margin-top:10px}
 @media(max-width:650px){.mobile-result{padding:15px 10px}.mobile-result .price-panel{padding:20px 8px}}
 </style>""",unsafe_allow_html=True)
 
@@ -83,6 +92,7 @@ def reiniciar():
     st.session_state.movil_job=None
     st.session_state.movil_error=''
     st.session_state.movil_foto=''
+    st.session_state.movil_resultado_desde=None
     st.session_state.movil_camera_version+=1
 
 if not st.session_state.movil_mostrar_resultado:
@@ -113,7 +123,7 @@ if not st.session_state.movil_mostrar_resultado:
             consultar(st.session_state.movil_codigo)
             st.rerun()
 
-@st.fragment(run_every='2s')
+@st.fragment(run_every='1s')
 def resultado():
     job=st.session_state.movil_job
     if job:
@@ -128,6 +138,7 @@ def resultado():
                 if item['status']=='done':
                     st.session_state.movil_producto=item.get('result')
                     st.session_state.movil_job=None
+                    st.session_state.movil_resultado_desde=time.monotonic()
                 elif item['status']=='error':
                     st.session_state.movil_error='Error de consulta en la base externa.'
                     st.session_state.movil_job=None
@@ -139,6 +150,11 @@ def resultado():
                 st.session_state.movil_job=None
     if not st.session_state.movil_mostrar_resultado:
         return
+    # El plazo comienza cuando termina la consulta, no cuando se toma la foto.
+    inicio=st.session_state.movil_resultado_desde
+    if inicio is not None and time.monotonic()-inicio >= 5:
+        reiniciar()
+        st.rerun()
     if st.session_state.movil_error:
         st.error(st.session_state.movil_error)
     elif st.session_state.movil_ultimo:
@@ -154,7 +170,13 @@ def resultado():
                         f'<div class="price-value">{price}</div></div></div>',unsafe_allow_html=True)
         elif not st.session_state.movil_job:
             barcode=html.escape(st.session_state.movil_ultimo)
-            st.markdown(f'<div class="mobile-result"><div class="missing">PRODUCTO NO ENCONTRADO</div><div class="product-code">Código: {barcode}</div></div>',unsafe_allow_html=True)
+            st.markdown(
+                '<div class="mobile-not-found">'
+                '<div class="barcode-card"><div class="barcode-bars"></div>'
+                '<div class="barcode-caption">PRECIO &nbsp;•&nbsp; RD$</div></div>'
+                '<div class="scan-title">PRODUCTO NO ENCONTRADO</div>'
+                '<div class="scan-hint">El precio se mostrará automáticamente</div>'
+                '</div>', unsafe_allow_html=True)
 resultado()
 if st.session_state.movil_mostrar_resultado:
     if st.button('📷 Escanear otro producto',type='primary',use_container_width=True):
