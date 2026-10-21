@@ -423,7 +423,8 @@ pages = {"Principal": [pagina_tradicional, pagina_movil]}
 config = [
     ("cargar_archivo", "pages/10_Inventarios.py", "Inventarios independientes", "📚"),
     ("consultar_base", "pages/4_Listado_Productos.py", "Consulta de Base de Datos", "📋"),
-    ("fuentes", "pages/2_Fuentes_de_datos.py", "Fuentes de Datos", "🔌"),
+    ("fuentes", "pages/2_Fuentes_de_datos.py", "Administración de Fuentes de Datos", "🔌"),
+    ("fuentes", "pages/11_Seleccion_Fuentes.py", "Selección de Fuentes de Datos", "🎯"),
     ("configurar", "pages/3_Consulta_Bases_de_Datos.py", "Configurar Consulta", "⚙️"),
     ("logo", "pages/3_Logo_del_negocio.py", "Logo del Negocio", "🖼️"),
     ("usuarios", "pages/5_Administrador_Usuarios.py", "Administrador de Usuarios", "👥"),

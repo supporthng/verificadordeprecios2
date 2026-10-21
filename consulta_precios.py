@@ -614,6 +614,8 @@ def buscar_producto():
         mode, source_id = active_source()
         if mode == "local":
             df = catalog()
+            if df.empty:
+                raise RuntimeError('El inventario activo no contiene productos o no hay un inventario seleccionado.')
             hits = df[df["barcode"].astype(str).str.strip() == query].head(1)
             if hits.empty:
                 st.session_state.not_found = True
@@ -646,8 +648,7 @@ def buscar_producto():
             st.session_state.external_started = time.monotonic()
     except Exception as exc:
         st.session_state.consult_error = (
-            "No se pudo consultar la fuente seleccionada. "
-            "Revisa la configuración y el conector Windows."
+            "No se pudo consultar la fuente seleccionada: " + str(exc)
         )
         st.session_state.result_time = time.monotonic()
 
